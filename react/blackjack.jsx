@@ -7,9 +7,6 @@ import { useState, useMemo } from 'react'
 
 // ── 1. Constantes ─────────────────────────────────────────
 
-const CARD_IMG_BASE =
-  'https://www.cs.cornell.edu/courses/cs312/2003sp/lectures/lec11/deck/'
-
 const NUM_DECKS    = 6
 const PENETRATION  = 0.75
 const INIT_BANK    = 1000
@@ -184,17 +181,42 @@ function cardRotation(id) {
 
 // ── 5. Sous-composants ────────────────────────────────────
 
+const CARD_IMG_BASE = 'https://raw.githubusercontent.com/hanhaechi/playing-cards/master/'
+
+// Mapping vers le format du repo : {suit}_{rank}.png
+const RANK_TO_IMG = {
+  'ace':'A', '2':'2', '3':'3', '4':'4', '5':'5', '6':'6',
+  '7':'7', '8':'8', '9':'9', '10':'10',
+  'jack':'J', 'queen':'Q', 'king':'K',
+}
+
+function cardImgUrl(card) {
+  return `${CARD_IMG_BASE}${card.suit}_${RANK_TO_IMG[card.rank]}.png`
+}
+
 function CardImg({ card, faceDown }) {
-  const rot = useMemo(() => cardRotation(card?.id ?? 'back'), [card])
-  const src = faceDown || !card
-    ? `${CARD_IMG_BASE}back_of_cards.png`
-    : `${CARD_IMG_BASE}${card.rank}_of_${card.suit}.png`
-  const alt = faceDown ? 'Hidden card' : `${card?.rank} of ${card?.suit}`
+  const rot = useMemo(() => cardRotation(card?.id ?? 'back'), [card?.id])
+
+  const style = { transform: `rotate(${rot}deg)` }
+  const cls   = 'w-14 h-20 md:w-16 md:h-24 rounded-lg shadow-md object-cover select-none flex-shrink-0'
+
+  if (faceDown || !card) {
+    return (
+      <img
+        src={`${CARD_IMG_BASE}back_dark.png`}
+        alt="Carte cachée"
+        style={style}
+        className={cls}
+      />
+    )
+  }
+
   return (
     <img
-      src={src} alt={alt}
-      style={{ transform: `rotate(${rot}deg)` }}
-      className="w-14 h-20 md:w-16 md:h-24 rounded-lg shadow-lg object-cover select-none"
+      src={cardImgUrl(card)}
+      alt={`${card.rank} of ${card.suit}`}
+      style={style}
+      className={cls}
     />
   )
 }
