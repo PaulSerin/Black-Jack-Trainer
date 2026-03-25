@@ -10,7 +10,7 @@ import pytest
 from simulation.engine import Card, Hand
 from simulation.deviations import (
     ILLUSTRIOUS_18, Deviation,
-    get_deviation, get_action, should_take_insurance,
+    get_deviation, should_take_insurance,
 )
 from simulation.strategy import get_basic_strategy
 
@@ -368,41 +368,41 @@ class TestDeviationOverridesBasicStrategy:
         h = hard_hand("10", "6")
         dealer = up("10")
         assert get_basic_strategy(h, dealer) == "SUR"
-        assert get_action(h, dealer, 0.0) == "S"
+        assert get_action(h, dealer, "basic_deviations", 0.0) == "S"
 
     def test_16_vs_10_negative_tc_returns_basic(self):
         """TC=-1 → pas de déviation → get_action retourne SUR (basic)."""
         h = hard_hand("10", "6")
         dealer = up("10")
-        assert get_action(h, dealer, -1.0) == "SUR"
+        assert get_action(h, dealer, "basic_deviations", -1.0) == "SUR"
 
     def test_15_vs_10_tc4_overrides_sur(self):
         """Basic: SUR. Déviation TC=4: S."""
         h = hard_hand("10", "5")
         dealer = up("10")
         assert get_basic_strategy(h, dealer) == "SUR"
-        assert get_action(h, dealer, 4.0) == "S"
+        assert get_action(h, dealer, "basic_deviations", 4.0) == "S"
 
     def test_12_vs_3_tc2_overrides_hit(self):
         """Basic: H. Déviation TC=2: S."""
         h = hard_hand("7", "5")
         dealer = up("3")
         assert get_basic_strategy(h, dealer) == "H"
-        assert get_action(h, dealer, 2.0) == "S"
+        assert get_action(h, dealer, "basic_deviations", 2.0) == "S"
 
     def test_11_vs_ace_tc1_overrides_hit(self):
         """Basic: H. Déviation TC=1: D."""
         h = hard_hand("7", "4")
         dealer = up("A")
         assert get_basic_strategy(h, dealer) == "H"
-        assert get_action(h, dealer, 1.0) == "D"
+        assert get_action(h, dealer, "basic_deviations", 1.0) == "D"
 
     def test_9_vs_2_tc1_overrides_hit(self):
         """Basic: H. Déviation TC=1: D."""
         h = hard_hand("5", "4")
         dealer = up("2")
         assert get_basic_strategy(h, dealer) == "H"
-        assert get_action(h, dealer, 1.0) == "D"
+        assert get_action(h, dealer, "basic_deviations", 1.0) == "D"
 
     def test_10_10_vs_6_tc4_overrides_stand(self):
         """Basic: S (10,10 split=N → hard 20). Déviation TC=4: Y (split)."""
@@ -410,34 +410,34 @@ class TestDeviationOverridesBasicStrategy:
         dealer = up("6")
         # 10,10 split table = N → fallback hard 20 → S
         assert get_basic_strategy(h, dealer) == "S"
-        assert get_action(h, dealer, 4.0) == "Y"
+        assert get_action(h, dealer, "basic_deviations", 4.0) == "Y"
 
     def test_13_vs_2_negative_tc_overrides_stand(self):
         """Basic: S. Déviation TC=-1: H."""
         h = hard_hand("7", "6")
         dealer = up("2")
         assert get_basic_strategy(h, dealer) == "S"
-        assert get_action(h, dealer, -1.0) == "H"
+        assert get_action(h, dealer, "basic_deviations", -1.0) == "H"
 
     def test_12_vs_4_tc_zero_overrides_stand(self):
         """Basic: S. Déviation TC=0: H."""
         h = hard_hand("7", "5")
         dealer = up("4")
         assert get_basic_strategy(h, dealer) == "S"
-        assert get_action(h, dealer, 0.0) == "H"
+        assert get_action(h, dealer, "basic_deviations", 0.0) == "H"
 
     def test_12_vs_4_positive_tc_uses_basic(self):
         """TC=0.5 > 0 → pas de déviation → S (basic)."""
         h = hard_hand("7", "5")
         dealer = up("4")
-        assert get_action(h, dealer, 0.5) == "S"
+        assert get_action(h, dealer, "basic_deviations", 0.5) == "S"
 
     def test_16_vs_9_tc5_overrides_sur(self):
         """Basic: SUR. Déviation TC=5: S."""
         h = hard_hand("10", "6")
         dealer = up("9")
         assert get_basic_strategy(h, dealer) == "SUR"
-        assert get_action(h, dealer, 5.0) == "S"
+        assert get_action(h, dealer, "basic_deviations", 5.0) == "S"
 
     def test_insurance_decision_via_should_take_insurance(self):
         """should_take_insurance est la bonne API pour l'assurance."""
@@ -448,14 +448,14 @@ class TestDeviationOverridesBasicStrategy:
         """get_action ne retourne jamais INS ; l'assurance est décidée séparément."""
         h = hard_hand("9", "7")
         # TC=10 : aucune déviation pour 16 vs A dans I18 → SUR (basic)
-        assert get_action(h, up("A"), 10.0) == "SUR"
+        assert get_action(h, up("A"), "basic_deviations", 10.0) == "SUR"
 
     def test_hard_10_vs_a_tc4_overrides_hit(self):
         """Basic: H. Déviation TC=4: D."""
         h = hard_hand("6", "4")
         dealer = up("A")
         assert get_basic_strategy(h, dealer) == "H"
-        assert get_action(h, dealer, 4.0) == "D"
+        assert get_action(h, dealer, "basic_deviations", 4.0) == "D"
 
     def test_pair_88_vs_9_tc5_stays_split(self):
         """8,8 est toujours split. La déviation '16 vs 9' (hard) ne s'applique pas."""
@@ -464,4 +464,4 @@ class TestDeviationOverridesBasicStrategy:
         # Basic strategy → Y (always split 8s)
         assert get_basic_strategy(h, dealer) == "Y"
         # Avec TC=5, on ne doit PAS retourner "S" (déviation hard 16 vs 9)
-        assert get_action(h, dealer, 5.0) == "Y"
+        assert get_action(h, dealer, "basic_deviations", 5.0) == "Y"

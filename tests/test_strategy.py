@@ -9,7 +9,7 @@ import pytest
 from simulation.engine import Card, Hand
 from simulation.strategy import (
     HARD_STRATEGY, SOFT_STRATEGY, SPLIT_STRATEGY, SURRENDER,
-    UPCARDS, get_basic_strategy,
+    UPCARDS, get_basic_strategy, _normalize_upcard,
 )
 
 
@@ -25,7 +25,6 @@ def hard_hand(*ranks: str) -> Hand:
 
 
 def soft_hand(non_ace_rank: str) -> Hand:
-    """Crée une main A + non_ace_rank."""
     h = Hand()
     h.add_card(Card("A", "♠"))
     h.add_card(Card(non_ace_rank, "♥"))
@@ -44,172 +43,210 @@ def up(rank: str) -> Card:
 
 
 # ===========================================================================
+# Normalisation des upcards figures
+# ===========================================================================
+
+class TestNormalizeUpcard:
+    def test_j_normalized_to_10(self):
+        assert _normalize_upcard("J") == "10"
+
+    def test_q_normalized_to_10(self):
+        assert _normalize_upcard("Q") == "10"
+
+    def test_k_normalized_to_10(self):
+        assert _normalize_upcard("K") == "10"
+
+    def test_10_unchanged(self):
+        assert _normalize_upcard("10") == "10"
+
+    def test_a_unchanged(self):
+        assert _normalize_upcard("A") == "A"
+
+    def test_numeric_ranks_unchanged(self):
+        for r in ("2", "3", "4", "5", "6", "7", "8", "9"):
+            assert _normalize_upcard(r) == r
+
+
+# ===========================================================================
+# Bug fix : J/Q/K doivent donner le même résultat que "10"
+# ===========================================================================
+
+class TestFigureUpcardNormalization:
+    """
+    Avant le fix, J/Q/K retournaient "S" (défaut) au lieu de la vraie action.
+    Ces tests vérifient que la normalisation fonctionne.
+    """
+
+    @pytest.mark.parametrize("figure", ["J", "Q", "K"])
+    def test_hard_11_vs_figure_is_double(self, figure):
+        """Hard 11 vs 10 → D. Avec J/Q/K le bug retournait 'S'."""
+        h = hard_hand("7", "4")
+        assert get_basic_strategy(h, up(figure)) == "D"
+
+    @pytest.mark.parametrize("figure", ["J", "Q", "K"])
+    def test_hard_16_vs_figure_is_surrender(self, figure):
+        """Hard 16 vs 10 → SUR. Avec J/Q/K le bug retournait 'S'."""
+        h = hard_hand("10", "6")
+        assert get_basic_strategy(h, up(figure)) == "SUR"
+
+    @pytest.mark.parametrize("figure", ["J", "Q", "K"])
+    def test_hard_15_vs_figure_is_surrender(self, figure):
+        """Hard 15 vs 10 → SUR."""
+        h = hard_hand("10", "5")
+        assert get_basic_strategy(h, up(figure)) == "SUR"
+
+    @pytest.mark.parametrize("figure", ["J", "Q", "K"])
+    def test_hard_10_vs_figure_is_hit(self, figure):
+        """Hard 10 vs 10 → H (pas D, pas S)."""
+        h = hard_hand("6", "4")
+        assert get_basic_strategy(h, up(figure)) == "H"
+
+    @pytest.mark.parametrize("figure", ["J", "Q", "K"])
+    def test_hard_12_vs_figure_is_hit(self, figure):
+        """Hard 12 vs 10 → H."""
+        h = hard_hand("7", "5")
+        assert get_basic_strategy(h, up(figure)) == "H"
+
+    @pytest.mark.parametrize("figure", ["J", "Q", "K"])
+    def test_figure_same_as_10(self, figure):
+        """Pour toute main, J/Q/K doit donner le même résultat que '10'."""
+        hands = [
+            hard_hand("9", "7"),    # hard 16
+            hard_hand("7", "5"),    # hard 12
+            hard_hand("6", "4"),    # hard 10
+            hard_hand("7", "4"),    # hard 11
+            hard_hand("5", "4"),    # hard 9
+            soft_hand("7"),         # A,7 soft 18
+            pair_hand("8"),         # 8,8
+        ]
+        for h in hands:
+            assert get_basic_strategy(h, up(figure)) == get_basic_strategy(h, up("10")), \
+                f"Discordance pour {[str(c) for c in h.cards]} vs {figure}"
+
+
+# ===========================================================================
 # Intégrité des tables
 # ===========================================================================
 
 class TestTableIntegrity:
     def test_hard_strategy_size(self):
-        # 10 totaux (8–17) × 10 upcards
-        assert len(HARD_STRATEGY) == 100
+        assert len(HARD_STRATEGY) == 10 * 10  # 10 totaux × 10 upcards
 
     def test_soft_strategy_size(self):
-        # 8 valeurs (2–9) × 10 upcards
-        assert len(SOFT_STRATEGY) == 80
+        assert len(SOFT_STRATEGY) == 8 * 10
 
     def test_split_strategy_size(self):
-        # 10 paires × 10 upcards
-        assert len(SPLIT_STRATEGY) == 100
+        assert len(SPLIT_STRATEGY) == 10 * 10
 
     def test_all_hard_keys_present(self):
         for total in range(8, 18):
-            for u in UPCARDS:
-                assert (total, u) in HARD_STRATEGY, f"Manquant hard ({total},{u})"
+            for upcard in UPCARDS:
+                assert (total, upcard) in HARD_STRATEGY
 
     def test_all_soft_keys_present(self):
         for nav in range(2, 10):
-            for u in UPCARDS:
-                assert (nav, u) in SOFT_STRATEGY, f"Manquant soft ({nav},{u})"
+            for upcard in UPCARDS:
+                assert (nav, upcard) in SOFT_STRATEGY
 
     def test_all_split_keys_present(self):
         for pv in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11):
-            for u in UPCARDS:
-                assert (pv, u) in SPLIT_STRATEGY, f"Manquant split ({pv},{u})"
+            for upcard in UPCARDS:
+                assert (pv, upcard) in SPLIT_STRATEGY
 
     def test_hard_actions_valid(self):
         valid = {"H", "S", "D", "Ds", "SUR"}
-        for k, v in HARD_STRATEGY.items():
-            assert v in valid, f"Hard {k}: {v!r} invalide"
+        for key, action in HARD_STRATEGY.items():
+            assert action in valid, f"Action invalide {key}: {action!r}"
 
     def test_soft_actions_valid(self):
         valid = {"H", "S", "D", "Ds"}
-        for k, v in SOFT_STRATEGY.items():
-            assert v in valid, f"Soft {k}: {v!r} invalide"
+        for key, action in SOFT_STRATEGY.items():
+            assert action in valid, f"Action invalide {key}: {action!r}"
 
     def test_split_actions_valid(self):
         valid = {"Y", "Y/N", "N", "S"}
-        for k, v in SPLIT_STRATEGY.items():
-            assert v in valid, f"Split {k}: {v!r} invalide"
+        for key, action in SPLIT_STRATEGY.items():
+            assert action in valid, f"Action invalide {key}: {action!r}"
 
 
 # ===========================================================================
-# HARD STRATEGY — cas clés
+# Hard strategy — cas clés
 # ===========================================================================
 
 class TestHardStrategy:
-    @pytest.mark.parametrize("ranks, dealer_rank, expected", [
-        # Hard 16 vs 9 → SUR
-        (("10", "6"), "9",  "SUR"),
-        # Hard 16 vs 10 → SUR
-        (("10", "6"), "10", "SUR"),
-        # Hard 12 vs 4 → S
-        (("7",  "5"), "4",  "S"),
-        # Hard 11 vs 6 → D
-        (("6",  "5"), "6",  "D"),
-        # Hard 9 vs 3 → D
-        (("5",  "4"), "3",  "D"),
-        # Hard 8 vs 5 → H
-        (("5",  "3"), "5",  "H"),
-        # Hard 13 vs 7 → H
-        (("7",  "6"), "7",  "H"),
-        # Hard 17 vs A → S
-        (("10", "7"), "A",  "S"),
-        # Hard 10 vs 10 → H
-        (("6",  "4"), "10", "H"),
-        # Hard 15 vs 10 → SUR
-        (("10", "5"), "10", "SUR"),
+    @pytest.mark.parametrize("ranks,upcard,expected", [
+        (("9","7"),  "9",  "SUR"),   # 16 vs 9 → SUR
+        (("9","7"),  "10", "SUR"),   # 16 vs 10 → SUR
+        (("10","6"), "4",  "S"),     # 16 vs 4 → S
+        (("10","5"), "3",  "S"),     # hard 15 vs 3 → S
+        (("8","4"),  "6",  "S"),     # hard 12 vs 6 → S
+        (("6","4"),  "7",  "D"),     # hard 10 vs 7 → D
+        (("6","5"),  "5",  "D"),     # hard 11 vs 5 → D
+        (("7","4"),  "A",  "H"),     # hard 11 vs A → H
+        (("7","5"),  "10", "H"),     # hard 12 vs 10 → H
+        (("10","3"), "A",  "H"),     # hard 13 vs A → H
     ])
-    def test_hard(self, ranks, dealer_rank, expected):
+    def test_hard(self, ranks, upcard, expected):
         h = hard_hand(*ranks)
-        assert get_basic_strategy(h, up(dealer_rank)) == expected
+        assert get_basic_strategy(h, up(upcard)) == expected
 
     def test_hard_16_vs_7_is_hit(self):
-        h = hard_hand("10", "6")
-        assert get_basic_strategy(h, up("7")) == "H"
+        assert get_basic_strategy(hard_hand("9", "7"), up("7")) == "H"
 
     def test_hard_16_vs_6_is_stand(self):
-        h = hard_hand("10", "6")
-        assert get_basic_strategy(h, up("6")) == "S"
+        assert get_basic_strategy(hard_hand("9", "7"), up("6")) == "S"
 
     def test_hard_12_vs_2_is_hit(self):
-        h = hard_hand("7", "5")
-        assert get_basic_strategy(h, up("2")) == "H"
+        assert get_basic_strategy(hard_hand("7", "5"), up("2")) == "H"
 
     def test_hard_12_vs_6_is_stand(self):
-        h = hard_hand("7", "5")
-        assert get_basic_strategy(h, up("6")) == "S"
+        assert get_basic_strategy(hard_hand("7", "5"), up("6")) == "S"
 
     def test_hard_total_below_8_is_hit(self):
-        h = hard_hand("3", "4")   # hard 7
-        assert get_basic_strategy(h, up("6")) == "H"
+        assert get_basic_strategy(hard_hand("3", "4"), up("6")) == "H"
 
     def test_hard_total_above_17_is_stand(self):
-        h = hard_hand("10", "9")  # hard 19
-        assert get_basic_strategy(h, up("A")) == "S"
+        assert get_basic_strategy(hard_hand("10", "9"), up("7")) == "S"
 
     def test_hard_11_vs_ace_is_hit(self):
-        # Pour 6 decks S17 : hard 11 vs A → H (pas D)
-        h = hard_hand("7", "4")
-        assert get_basic_strategy(h, up("A")) == "H"
+        assert get_basic_strategy(hard_hand("6", "5"), up("A")) == "H"
 
     def test_hard_10_vs_ace_is_hit(self):
-        h = hard_hand("6", "4")
-        assert get_basic_strategy(h, up("A")) == "H"
+        assert get_basic_strategy(hard_hand("6", "4"), up("A")) == "H"
 
     def test_hard_9_vs_2_is_hit(self):
-        h = hard_hand("5", "4")
-        assert get_basic_strategy(h, up("2")) == "H"
+        assert get_basic_strategy(hard_hand("5", "4"), up("2")) == "H"
 
 
 # ===========================================================================
-# SOFT STRATEGY — cas clés
+# Soft strategy — cas clés
 # ===========================================================================
 
 class TestSoftStrategy:
-    @pytest.mark.parametrize("non_ace, dealer_rank, expected", [
-        # A,7 soft 18 vs 3 → Ds
-        ("7", "3",  "Ds"),
-        # A,7 soft 18 vs 9 → H
-        ("7", "9",  "H"),
-        # A,8 soft 19 vs 6 → Ds
-        ("8", "6",  "Ds"),
-        # A,8 soft 19 vs 5 → S
-        ("8", "5",  "S"),
-        # A,6 soft 17 vs 4 → D
-        ("6", "4",  "D"),
-        # A,6 soft 17 vs 2 → H
-        ("6", "2",  "H"),
-        # A,2 soft 13 vs 5 → D
-        ("2", "5",  "D"),
-        # A,2 soft 13 vs 4 → H
-        ("2", "4",  "H"),
-        # A,4 soft 15 vs 6 → D
-        ("4", "6",  "D"),
-        # A,9 soft 20 vs A → S
-        ("9", "A",  "S"),
+    @pytest.mark.parametrize("non_ace,upcard,expected", [
+        ("7", "3",  "Ds"),  # A,7 vs 3 → Ds
+        ("7", "9",  "H"),   # A,7 vs 9 → H
+        ("8", "6",  "Ds"),  # A,8 vs 6 → Ds
+        ("8", "5",  "S"),   # A,8 vs 5 → S
+        ("6", "4",  "D"),   # A,6 vs 4 → D
+        ("6", "2",  "H"),   # A,6 vs 2 → H
+        ("2", "5",  "D"),   # A,2 vs 5 → D
+        ("2", "4",  "H"),   # A,2 vs 4 → H
+        ("4", "6",  "D"),   # A,4 vs 6 → D
+        ("9", "A",  "S"),   # A,9 vs A → S
     ])
-    def test_soft(self, non_ace, dealer_rank, expected):
+    def test_soft(self, non_ace, upcard, expected):
         h = soft_hand(non_ace)
-        assert get_basic_strategy(h, up(dealer_rank)) == expected
+        assert get_basic_strategy(h, up(upcard)) == expected
 
     def test_soft_18_vs_7_is_stand(self):
-        h = soft_hand("7")
-        assert get_basic_strategy(h, up("7")) == "S"
+        assert get_basic_strategy(soft_hand("7"), up("7")) == "S"
 
     def test_soft_18_vs_2_is_double_stand(self):
-        h = soft_hand("7")
-        assert get_basic_strategy(h, up("2")) == "Ds"
+        assert get_basic_strategy(soft_hand("7"), up("2")) == "Ds"
 
     def test_soft_17_vs_7_is_hit(self):
-        h = soft_hand("6")
-        assert get_basic_strategy(h, up("7")) == "H"
-
-    def test_soft_16_vs_4_is_double(self):
-        h = soft_hand("5")
-        assert get_basic_strategy(h, up("4")) == "D"
-
-    def test_soft_14_vs_5_is_double(self):
-        h = soft_hand("3")
-        assert get_basic_strategy(h, up("5")) == "D"
+        assert get_basic_strategy(soft_hand("6"), up("7")) == "H"
 
     def test_soft_hand_is_recognised(self):
         h = soft_hand("6")
@@ -218,75 +255,53 @@ class TestSoftStrategy:
 
 
 # ===========================================================================
-# SPLIT STRATEGY — cas clés
+# Split strategy — cas clés
 # ===========================================================================
 
 class TestSplitStrategy:
-    @pytest.mark.parametrize("rank, dealer_rank, expected", [
-        # A,A toujours splitter
-        ("A", "5", "Y"),
-        ("A", "A", "Y"),
-        # 8,8 toujours splitter
-        ("8", "10", "Y"),
-        ("8", "A",  "Y"),
-        # 9,9 vs 7 → S (stand)
-        ("9", "7",  "S"),
-        # 9,9 vs 2 → Y
-        ("9", "2",  "Y"),
-        # 9,9 vs 10 → S
-        ("9", "10", "S"),
-        # 5,5 → N split → fallback hard 10 vs 6 → D
-        ("5", "6",  "D"),
-        # 10,10 → N split → fallback hard 20 → S
-        ("10","5",  "S"),
-        # 3,3 vs 2 → Y/N
-        ("3", "2",  "Y/N"),
-        # 3,3 vs 4 → Y
-        ("3", "4",  "Y"),
-        # 6,6 vs 2 → Y/N
-        ("6", "2",  "Y/N"),
-        # 4,4 vs 5 → Y/N
-        ("4", "5",  "Y/N"),
-        # 7,7 vs 8 → N split → fallback hard 14 vs 8 → H
-        ("7", "8",  "H"),
+    @pytest.mark.parametrize("rank,dealer_rank,expected", [
+        ("A", "5",  "Y"),    # A,A vs 5 → Y
+        ("A", "A",  "Y"),    # A,A vs A → Y
+        ("8", "10", "Y"),    # 8,8 vs 10 → Y
+        ("8", "A",  "Y"),    # 8,8 vs A → Y
+        ("9", "7",  "S"),    # 9,9 vs 7 → S
+        ("9", "2",  "Y"),    # 9,9 vs 2 → Y
+        ("9", "10", "S"),    # 9,9 vs 10 → S
+        ("5", "6",  "D"),    # 5,5 → N → hard 10 vs 6 → D
+        ("10","5",  "S"),    # 10,10 → N → hard 20 → S
+        ("3", "2",  "Y/N"),  # 3,3 vs 2 → Y/N
+        ("3", "4",  "Y"),    # 3,3 vs 4 → Y
+        ("6", "2",  "Y/N"),  # 6,6 vs 2 → Y/N
+        ("4", "5",  "Y/N"),  # 4,4 vs 5 → Y/N
+        ("7", "8",  "H"),    # 7,7 → N → hard 14 vs 8 → H
     ])
     def test_split(self, rank, dealer_rank, expected):
         h = pair_hand(rank)
         assert get_basic_strategy(h, up(dealer_rank)) == expected
 
     def test_pair_55_treated_as_hard_10_vs_6(self):
-        """5,5 → N split → fallback hard 10 → D vs 6."""
-        h = pair_hand("5")
-        assert get_basic_strategy(h, up("6")) == "D"
-
-    def test_pair_55_vs_10_is_hit(self):
-        """5,5 vs 10 → N split → hard 10 vs 10 → H."""
-        h = pair_hand("5")
-        assert get_basic_strategy(h, up("10")) == "H"
-
-    def test_pair_77_vs_8_is_hit(self):
-        """7,7 → N split → hard 14 vs 8 → H."""
-        h = pair_hand("7")
-        assert get_basic_strategy(h, up("8")) == "H"
+        assert get_basic_strategy(pair_hand("5"), up("6")) == "D"
 
     def test_pair_1010_vs_5_is_stand(self):
-        """10,10 → N split → hard 20 vs 5 → S."""
-        h = pair_hand("10")
-        assert get_basic_strategy(h, up("5")) == "S"
-
-    def test_pair_99_vs_7_falls_through_to_stand(self):
-        """9,9 vs 7 → 'S' directement depuis la table split."""
-        h = pair_hand("9")
-        assert get_basic_strategy(h, up("7")) == "S"
+        assert get_basic_strategy(pair_hand("10"), up("5")) == "S"
 
     def test_pair_aa_split_not_soft(self):
-        """A,A doit retourner 'Y' et non consulter soft strategy."""
-        h = pair_hand("A")
-        assert get_basic_strategy(h, up("6")) == "Y"
+        assert get_basic_strategy(pair_hand("A"), up("6")) == "Y"
+
+    # Figures en tant que paire
+    @pytest.mark.parametrize("figure", ["J", "Q", "K"])
+    def test_pair_figures_same_as_pair_10(self, figure):
+        """K,K doit être traité identiquement à 10,10."""
+        for upcard in ("2", "5", "10", "A"):
+            h_fig = pair_hand(figure)
+            h_ten = pair_hand("10")
+            assert get_basic_strategy(h_fig, up(upcard)) == \
+                   get_basic_strategy(h_ten, up(upcard)), \
+                   f"Discordance paire {figure} vs upcard {upcard}"
 
 
 # ===========================================================================
-# SURRENDER
+# SURRENDER dict
 # ===========================================================================
 
 class TestSurrenderDict:
@@ -310,6 +325,4 @@ class TestSurrenderDict:
 
     def test_hard_strategy_has_sur_for_surrender_cases(self):
         for (total, upcard) in SURRENDER:
-            assert HARD_STRATEGY[(total, upcard)] == "SUR", (
-                f"Attendu SUR pour ({total},{upcard})"
-            )
+            assert HARD_STRATEGY[(total, upcard)] == "SUR"

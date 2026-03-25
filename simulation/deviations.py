@@ -22,7 +22,6 @@ import argparse
 from dataclasses import dataclass
 
 from simulation.engine import Card, Hand
-from simulation.strategy import get_basic_strategy
 
 
 # ---------------------------------------------------------------------------
@@ -185,23 +184,6 @@ def get_deviation(hand: Hand, dealer_upcard: Card, true_count: float) -> str | N
                 return dev.action
 
     return None
-
-
-# ---------------------------------------------------------------------------
-# get_action — point d'entrée combiné
-# ---------------------------------------------------------------------------
-
-def get_action(hand: Hand, dealer_upcard: Card, true_count: float) -> str:
-    """
-    Retourne l'action recommandée en tenant compte des déviations I18.
-
-    1. Vérifie get_deviation() — si une déviation s'applique, elle prime.
-    2. Sinon, retombe sur get_basic_strategy().
-    """
-    deviation = get_deviation(hand, dealer_upcard, true_count)
-    if deviation is not None:
-        return deviation
-    return get_basic_strategy(hand, dealer_upcard)
 
 
 # ---------------------------------------------------------------------------
