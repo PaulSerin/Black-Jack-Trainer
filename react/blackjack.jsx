@@ -259,7 +259,7 @@ function HintBox({ hint }) {
   return (
     <div className={`flex flex-col gap-0.5 px-4 py-2.5 rounded-xl font-bold shadow-lg ${m.bg} ${m.fg} min-w-36`}>
       <div className="text-xs font-normal opacity-70">
-        {hint.isDeviation ? '★ I18 Deviation' : 'Basic Strategy'}
+        {hint.isDeviation ? '★ I18 Deviation' : 'Best Play'}
       </div>
       <div className="text-base">{m.label}</div>
       {hint.isDeviation && (
@@ -806,10 +806,7 @@ export default function App() {
             <p className="text-white/30 text-xs mt-0.5">6 decks · S17 · 3:2 · Hi-Lo</p>
           </div>
           <div className="flex gap-2 flex-wrap items-start">
-            <CoveredPanel hidden={!showCounter} onToggle={() => setShowCounter(v => !v)} label="Hi-Lo" icon="🃏">
-              <Counter rc={rc} tc={tc} />
-            </CoveredPanel>
-            {/* Hint panel — affiché dans le header pendant le jeu */}
+            {/* Hint panel — à gauche du Hi-Lo, affiché pendant le jeu */}
             {(phase === 'playing' || phase === 'insurance') && (
               <CoveredPanel hidden={!showHint} onToggle={() => setShowHint(v => !v)} label="Hint" icon="💡" className="min-w-36">
                 <div style={{ minHeight: '64px' }}>
@@ -832,6 +829,9 @@ export default function App() {
                 </div>
               </CoveredPanel>
             )}
+            <CoveredPanel hidden={!showCounter} onToggle={() => setShowCounter(v => !v)} label="Hi-Lo" icon="🃏">
+              <Counter rc={rc} tc={tc} />
+            </CoveredPanel>
             {/* Bankroll */}
             <div className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 flex flex-col gap-1.5 min-w-40">
               <span className="text-white/40 text-xs font-bold tracking-widest uppercase">Bankroll</span>
