@@ -21,6 +21,7 @@ from simulation.engine import (
     split_hand, dealer_must_hit, compute_hand_result,
 )
 from simulation.strategy import get_basic_strategy, HARD_STRATEGY, _normalize_upcard
+from simulation.deviations import get_deviation
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +85,20 @@ def _hard_fallback(hand: Hand, dealer_upcard: Card) -> str:
 # Jeu d'une main (récursif pour les splits)
 # ---------------------------------------------------------------------------
 
+def _pick_action(
+    hand: Hand,
+    dealer_upcard: Card,
+    true_count: float,
+    use_deviations: bool,
+) -> str:
+    """Return strategy action: deviation if applicable, else basic strategy."""
+    if use_deviations:
+        dev = get_deviation(hand, dealer_upcard, true_count)
+        if dev is not None:
+            return dev
+    return get_basic_strategy(hand, dealer_upcard)
+
+
 def _play_hand(
     hand: Hand,
     dealer_upcard: Card,
@@ -91,16 +106,18 @@ def _play_hand(
     counter: HiLoCounter,
     rules: TableRules,
     bet: float,
+    true_count: float,
+    use_deviations: bool,
     num_split_hands: int = 1,
 ) -> List[Tuple[Hand, float]]:
     """
-    Joue une main jusqu'à la fin (basic strategy).
+    Joue une main jusqu'à la fin.
     Met à jour le counter pour chaque carte tirée.
     Retourne une liste de (Hand, mise_finale).
     """
     while True:
         action = _resolve_action(
-            get_basic_strategy(hand, dealer_upcard),
+            _pick_action(hand, dealer_upcard, true_count, use_deviations),
             hand, dealer_upcard, rules, num_split_hands,
         )
 
@@ -114,8 +131,10 @@ def _play_hand(
             counter.update(hand2.cards[-1])
             new_count = num_split_hands + 1
             return (
-                _play_hand(hand1, dealer_upcard, shoe, counter, rules, bet, new_count)
-                + _play_hand(hand2, dealer_upcard, shoe, counter, rules, bet, new_count)
+                _play_hand(hand1, dealer_upcard, shoe, counter, rules, bet,
+                           true_count, use_deviations, new_count)
+                + _play_hand(hand2, dealer_upcard, shoe, counter, rules, bet,
+                             true_count, use_deviations, new_count)
             )
 
         if action == "D":
@@ -162,7 +181,9 @@ def simulate(config: SimConfig) -> SimulationResult:
     # Welford en ligne pour l'écart-type du profit par round
     welf_n, welf_mean, welf_M2 = 0, 0.0, 0.0
 
-    rounds_played = 0
+    rounds_played    = 0
+    bankroll_history = []   # [(round_index, bankroll)] snapshots
+    history_interval = config.history_interval if config.track_history else 0
 
     for _ in range(config.hands):
         if shoe.needs_shuffle:
@@ -207,6 +228,8 @@ def simulate(config: SimConfig) -> SimulationResult:
             welf_n, welf_mean, welf_M2 = _welford(welf_n, welf_mean, welf_M2, profit)
             max_bankroll = max(max_bankroll, bankroll)
             min_bankroll = min(min_bankroll, bankroll)
+            if history_interval and rounds_played % history_interval == 0:
+                bankroll_history.append((rounds_played, bankroll))
             continue
 
         # ── Blackjack dealer ────────────────────────────────────────────────
@@ -221,10 +244,15 @@ def simulate(config: SimConfig) -> SimulationResult:
             welf_n, welf_mean, welf_M2 = _welford(welf_n, welf_mean, welf_M2, profit)
             max_bankroll = max(max_bankroll, bankroll)
             min_bankroll = min(min_bankroll, bankroll)
+            if history_interval and rounds_played % history_interval == 0:
+                bankroll_history.append((rounds_played, bankroll))
             continue
 
         # ── Le joueur joue (hole card encore inconnue) ──────────────────────
-        hand_results = _play_hand(player_hand, dealer_upcard, shoe, counter, config.rules, bet)
+        hand_results = _play_hand(
+            player_hand, dealer_upcard, shoe, counter, config.rules, bet,
+            tc, config.use_deviations,
+        )
 
         # Hole card révélée maintenant
         counter.update(d2)
@@ -246,6 +274,8 @@ def simulate(config: SimConfig) -> SimulationResult:
             welf_n, welf_mean, welf_M2 = _welford(welf_n, welf_mean, welf_M2, profit)
             max_bankroll = max(max_bankroll, bankroll)
             min_bankroll = min(min_bankroll, bankroll)
+            if history_interval and rounds_played % history_interval == 0:
+                bankroll_history.append((rounds_played, bankroll))
             continue
 
         # ── Le dealer joue ──────────────────────────────────────────────────
@@ -289,6 +319,8 @@ def simulate(config: SimConfig) -> SimulationResult:
         welf_n, welf_mean, welf_M2 = _welford(welf_n, welf_mean, welf_M2, hand_profit)
         max_bankroll = max(max_bankroll, bankroll)
         min_bankroll = min(min_bankroll, bankroll)
+        if history_interval and rounds_played % history_interval == 0:
+            bankroll_history.append((rounds_played, bankroll))
 
     # ── Métriques finales ────────────────────────────────────────────────────
     profit_std       = math.sqrt(welf_M2 / welf_n) if welf_n > 1 else 0.0
@@ -300,7 +332,7 @@ def simulate(config: SimConfig) -> SimulationResult:
 
     return SimulationResult(
         hands_played      = rounds_played,
-        strategy_mode     = "basic",
+        strategy_mode     = "basic+deviations" if config.use_deviations else "basic",
         decks             = config.decks,
         penetration       = config.penetration,
         total_profit      = total_profit,
@@ -322,6 +354,7 @@ def simulate(config: SimConfig) -> SimulationResult:
         positive_tc_ratio = pos_tc_ratio,
         profit_std        = profit_std,
         profit_std_units  = profit_std_units,
+        bankroll_history  = bankroll_history,
     )
 
 

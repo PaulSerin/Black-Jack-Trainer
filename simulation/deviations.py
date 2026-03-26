@@ -9,11 +9,11 @@ Les deviations priment TOUJOURS sur la basic strategy quand le TC le justifie.
 Opérateurs :
   ">=" : dévier si true_count >= tc_threshold
   "<=" : dévier si true_count <= tc_threshold
+  "<"  : dévier si true_count <  tc_threshold  (strictement inférieur)
 
 Remarque sur les paires vs déviations hard :
   Les déviations "hard" ne s'appliquent qu'aux mains non-paires.
   Pour une paire (ex. 8,8), la décision de split prime.
-  La déviation 10,10 vs 5/6 est gérée via hand_type="pair".
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import argparse
 from dataclasses import dataclass
 
 from simulation.engine import Card, Hand
+from simulation.strategy import _normalize_upcard
 
 
 # ---------------------------------------------------------------------------
@@ -57,12 +58,6 @@ ILLUSTRIOUS_18: list[Deviation] = [
     # 15 vs 10 : standing au lieu de SUR
     Deviation("15 vs 10",          "hard",       15, "10", 4.0, ">=", "S"),
 
-    # 10,10 vs 5 : splitter au lieu de S
-    Deviation("10,10 vs 5",        "pair",       10, "5",  5.0, ">=", "Y"),
-
-    # 10,10 vs 6 : splitter au lieu de S
-    Deviation("10,10 vs 6",        "pair",       10, "6",  4.0, ">=", "Y"),
-
     # Hard 10 vs 10 : doubler au lieu de H
     Deviation("Hard 10 vs 10",     "hard",       10, "10", 4.0, ">=", "D"),
 
@@ -89,20 +84,26 @@ ILLUSTRIOUS_18: list[Deviation] = [
 
     # ── Negative deviations (TC <= seuil → changer l'action) ──────────────
 
-    # 13 vs 2 : hit au lieu de S
-    Deviation("13 vs 2",           "hard",       13, "2", -1.0, "<=", "H"),
+    # 13 vs 2 : hit au lieu de S  (TC < -1, i.e. TC <= -1.5)
+    Deviation("13 vs 2",           "hard",       13, "2", -1.0, "<", "H"),
 
-    # 12 vs 4 : hit au lieu de S
-    Deviation("12 vs 4",           "hard",       12, "4",  0.0, "<=", "H"),
+    # 12 vs 4 : hit au lieu de S  (TC < 0, i.e. TC <= -0.5)
+    Deviation("12 vs 4",           "hard",       12, "4",  0.0, "<", "H"),
 
-    # 12 vs 5 : hit au lieu de S
-    Deviation("12 vs 5",           "hard",       12, "5", -2.0, "<=", "H"),
+    # 12 vs 5 : hit au lieu de S  (TC < -2, i.e. TC <= -2.5)
+    Deviation("12 vs 5",           "hard",       12, "5", -2.0, "<", "H"),
 
-    # 12 vs 6 : hit au lieu de S
-    Deviation("12 vs 6",           "hard",       12, "6", -1.0, "<=", "H"),
+    # 12 vs 6 : hit au lieu de S  (TC < -1, i.e. TC <= -1.5)
+    Deviation("12 vs 6",           "hard",       12, "6", -1.0, "<", "H"),
 
-    # 13 vs 3 : hit au lieu de S
-    Deviation("13 vs 3",           "hard",       13, "3", -2.0, "<=", "H"),
+    # 13 vs 3 : hit au lieu de S  (TC < -2, i.e. TC <= -2.5)
+    Deviation("13 vs 3",           "hard",       13, "3", -2.0, "<", "H"),
+
+    # 14 vs 10 : stand au lieu de H/SUR
+    Deviation("14 vs 10",          "hard",       14, "10", 3.0, ">=", "S"),
+
+    # 15 vs 9 : stand au lieu de H/SUR
+    Deviation("15 vs 9",           "hard",       15, "9",  2.0, ">=", "S"),
 ]
 
 assert len(ILLUSTRIOUS_18) == 18, f"I18 contient {len(ILLUSTRIOUS_18)} entrées, attendu 18"
@@ -117,6 +118,8 @@ def _tc_matches(true_count: float, threshold: float, operator: str) -> bool:
         return true_count >= threshold
     if operator == "<=":
         return true_count <= threshold
+    if operator == "<":
+        return true_count < threshold
     return False
 
 
@@ -150,8 +153,9 @@ def get_deviation(hand: Hand, dealer_upcard: Card, true_count: float) -> str | N
       décision de mise séparée gérée par should_take_insurance().
     - Les déviations "hard" ne s'appliquent pas aux mains soft ni aux paires
       (pour les paires, seules les déviations "pair" sont éligibles).
+    - J/Q/K sont normalisés en "10" pour matcher les tables (même logique que strategy.py).
     """
-    upcard_rank = dealer_upcard.rank
+    upcard_rank = _normalize_upcard(dealer_upcard.rank)
 
     for dev in ILLUSTRIOUS_18:
 
@@ -193,7 +197,7 @@ def get_deviation(hand: Hand, dealer_upcard: Card, true_count: float) -> str | N
 def _verify() -> None:
     """Vérifie l'intégrité de la liste ILLUSTRIOUS_18."""
     valid_hand_types = {"hard", "pair", "insurance"}
-    valid_operators = {">=", "<="}
+    valid_operators = {">=", "<=", "<"}
     valid_actions = {"S", "D", "H", "Y", "INS"}
     valid_ranks = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "A"}
     errors: list[str] = []

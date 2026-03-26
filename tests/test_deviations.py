@@ -12,7 +12,7 @@ from simulation.deviations import (
     ILLUSTRIOUS_18, Deviation,
     get_deviation, should_take_insurance,
 )
-from simulation.strategy import get_basic_strategy
+from simulation.strategy import get_basic_strategy, get_action
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ class TestI18Integrity:
 
     def test_all_operators_valid(self):
         for dev in ILLUSTRIOUS_18:
-            assert dev.operator in (">=", "<="), f"{dev.situation}: opérateur invalide"
+            assert dev.operator in (">=", "<=", "<"), f"{dev.situation}: opérateur invalide"
 
     def test_all_hand_types_valid(self):
         for dev in ILLUSTRIOUS_18:
@@ -70,17 +70,20 @@ class TestI18Integrity:
         assert ins[0].tc_threshold == 3.0
         assert ins[0].action == "INS"
 
-    def test_two_pair_deviations(self):
+    def test_no_pair_deviations(self):
+        # Illustrious 18 per image source: no pair splits, only hard + insurance
         pairs = [d for d in ILLUSTRIOUS_18 if d.hand_type == "pair"]
-        assert len(pairs) == 2
-        situations = {d.situation for d in pairs}
-        assert "10,10 vs 5" in situations
-        assert "10,10 vs 6" in situations
+        assert len(pairs) == 0
 
-    def test_fifteen_hard_deviations(self):
-        # 1 insurance + 2 pair + 15 hard = 18
+    def test_seventeen_hard_deviations(self):
+        # 1 insurance + 17 hard = 18
         hards = [d for d in ILLUSTRIOUS_18 if d.hand_type == "hard"]
-        assert len(hards) == 15
+        assert len(hards) == 17
+
+    def test_14_vs_10_and_15_vs_9_present(self):
+        situations = {d.situation for d in ILLUSTRIOUS_18}
+        assert "14 vs 10" in situations
+        assert "15 vs 9" in situations
 
     def test_positive_deviations_have_gte_operator(self):
         """Les déviations qui recommandent S/D/Y sur une action plus passive → >=."""
@@ -91,11 +94,11 @@ class TestI18Integrity:
             if dev.operator == ">=":
                 assert dev.action in positive_actions | {"INS"}
 
-    def test_negative_deviations_have_lte_operator(self):
-        """Les déviations qui recommandent H (hit au lieu de stand) → <=."""
+    def test_negative_deviations_have_strict_lt_operator(self):
+        """Les déviations qui recommandent H (hit au lieu de stand) utilisent '<' (strict)."""
         for dev in ILLUSTRIOUS_18:
             if dev.action == "H":
-                assert dev.operator == "<="
+                assert dev.operator == "<"
 
 
 # ===========================================================================
@@ -154,30 +157,29 @@ class TestEachDeviation:
         h = hard_hand("10", "5")
         assert get_deviation(h, up("10"), 3.5) is None
 
-    # ── 10,10 vs 5 ─────────────────────────────────────────────────────────
+    # ── 14 vs 10 ───────────────────────────────────────────────────────────
 
-    def test_10_10_vs_5_at_threshold(self):
-        h = pair_hand("10")
-        assert get_deviation(h, up("5"), 5.0) == "Y"
+    def test_14_vs_10_at_threshold(self):
+        h = hard_hand("10", "4")
+        assert get_deviation(h, up("10"), 3.0) == "S"
 
-    def test_10_10_vs_5_below_threshold(self):
-        h = pair_hand("10")
-        assert get_deviation(h, up("5"), 4.5) is None
+    def test_14_vs_10_below_threshold(self):
+        h = hard_hand("10", "4")
+        assert get_deviation(h, up("10"), 2.5) is None
 
-    def test_10_10_vs_5_with_face_pair(self):
-        """K,K est une paire de valeur 10, même règle."""
-        h = pair_hand("K")
-        assert get_deviation(h, up("5"), 5.0) == "Y"
+    def test_14_vs_10_above_threshold(self):
+        h = hard_hand("10", "4")
+        assert get_deviation(h, up("10"), 5.0) == "S"
 
-    # ── 10,10 vs 6 ─────────────────────────────────────────────────────────
+    # ── 15 vs 9 ────────────────────────────────────────────────────────────
 
-    def test_10_10_vs_6_at_threshold(self):
-        h = pair_hand("10")
-        assert get_deviation(h, up("6"), 4.0) == "Y"
+    def test_15_vs_9_at_threshold(self):
+        h = hard_hand("10", "5")
+        assert get_deviation(h, up("9"), 2.0) == "S"
 
-    def test_10_10_vs_6_below_threshold(self):
-        h = pair_hand("10")
-        assert get_deviation(h, up("6"), 3.5) is None
+    def test_15_vs_9_below_threshold(self):
+        h = hard_hand("10", "5")
+        assert get_deviation(h, up("9"), 1.5) is None
 
     # ── Hard 10 vs 10 ──────────────────────────────────────────────────────
 
@@ -264,14 +266,19 @@ class TestEachDeviation:
         h = hard_hand("10", "6")
         assert get_deviation(h, up("9"), 4.5) is None
 
-    # ── 13 vs 2 (negative) ─────────────────────────────────────────────────
+    # ── 13 vs 2 (negative, TC < -1) ────────────────────────────────────────
 
-    def test_13_vs_2_at_threshold(self):
+    def test_13_vs_2_at_threshold_no_fire(self):
+        """TC = -1.0 is NOT < -1.0 → no deviation (basic strategy S)."""
         h = hard_hand("7", "6")
-        assert get_deviation(h, up("2"), -1.0) == "H"
+        assert get_deviation(h, up("2"), -1.0) is None
+
+    def test_13_vs_2_below_threshold(self):
+        """TC = -1.5 < -1.0 → deviation fires."""
+        h = hard_hand("7", "6")
+        assert get_deviation(h, up("2"), -1.5) == "H"
 
     def test_13_vs_2_above_threshold(self):
-        """TC = -0.5 > -1.0 → pas de déviation, basic strategy (S)."""
         h = hard_hand("7", "6")
         assert get_deviation(h, up("2"), -0.5) is None
 
@@ -279,41 +286,62 @@ class TestEachDeviation:
         h = hard_hand("7", "6")
         assert get_deviation(h, up("2"), -3.0) == "H"
 
-    # ── 12 vs 4 (negative) ─────────────────────────────────────────────────
+    # ── 12 vs 4 (negative, TC < 0) ─────────────────────────────────────────
 
-    def test_12_vs_4_at_threshold(self):
+    def test_12_vs_4_at_threshold_no_fire(self):
+        """TC = 0.0 is NOT < 0 → no deviation (basic strategy S)."""
         h = hard_hand("7", "5")
-        assert get_deviation(h, up("4"), 0.0) == "H"
+        assert get_deviation(h, up("4"), 0.0) is None
+
+    def test_12_vs_4_below_threshold(self):
+        """TC = -0.5 < 0 → deviation fires."""
+        h = hard_hand("7", "5")
+        assert get_deviation(h, up("4"), -0.5) == "H"
 
     def test_12_vs_4_above_threshold(self):
         h = hard_hand("7", "5")
         assert get_deviation(h, up("4"), 0.5) is None
 
-    # ── 12 vs 5 (negative) ─────────────────────────────────────────────────
+    # ── 12 vs 5 (negative, TC < -2) ────────────────────────────────────────
 
-    def test_12_vs_5_at_threshold(self):
+    def test_12_vs_5_at_threshold_no_fire(self):
+        """TC = -2.0 is NOT < -2.0 → no deviation."""
         h = hard_hand("7", "5")
-        assert get_deviation(h, up("5"), -2.0) == "H"
+        assert get_deviation(h, up("5"), -2.0) is None
+
+    def test_12_vs_5_below_threshold(self):
+        h = hard_hand("7", "5")
+        assert get_deviation(h, up("5"), -2.5) == "H"
 
     def test_12_vs_5_above_threshold(self):
         h = hard_hand("7", "5")
         assert get_deviation(h, up("5"), -1.5) is None
 
-    # ── 12 vs 6 (negative) ─────────────────────────────────────────────────
+    # ── 12 vs 6 (negative, TC < -1) ────────────────────────────────────────
 
-    def test_12_vs_6_at_threshold(self):
+    def test_12_vs_6_at_threshold_no_fire(self):
+        """TC = -1.0 is NOT < -1.0 → no deviation."""
         h = hard_hand("7", "5")
-        assert get_deviation(h, up("6"), -1.0) == "H"
+        assert get_deviation(h, up("6"), -1.0) is None
+
+    def test_12_vs_6_below_threshold(self):
+        h = hard_hand("7", "5")
+        assert get_deviation(h, up("6"), -1.5) == "H"
 
     def test_12_vs_6_above_threshold(self):
         h = hard_hand("7", "5")
         assert get_deviation(h, up("6"), -0.5) is None
 
-    # ── 13 vs 3 (negative) ─────────────────────────────────────────────────
+    # ── 13 vs 3 (negative, TC < -2) ────────────────────────────────────────
 
-    def test_13_vs_3_at_threshold(self):
+    def test_13_vs_3_at_threshold_no_fire(self):
+        """TC = -2.0 is NOT < -2.0 → no deviation."""
         h = hard_hand("7", "6")
-        assert get_deviation(h, up("3"), -2.0) == "H"
+        assert get_deviation(h, up("3"), -2.0) is None
+
+    def test_13_vs_3_below_threshold(self):
+        h = hard_hand("7", "6")
+        assert get_deviation(h, up("3"), -2.5) == "H"
 
     def test_13_vs_3_above_threshold(self):
         h = hard_hand("7", "6")
@@ -404,30 +432,53 @@ class TestDeviationOverridesBasicStrategy:
         assert get_basic_strategy(h, dealer) == "H"
         assert get_action(h, dealer, "basic_deviations", 1.0) == "D"
 
-    def test_10_10_vs_6_tc4_overrides_stand(self):
-        """Basic: S (10,10 split=N → hard 20). Déviation TC=4: Y (split)."""
+    def test_10_10_vs_6_no_deviation(self):
+        """10,10 pair split deviation removed — basic strategy S applies at any TC."""
         h = pair_hand("10")
         dealer = up("6")
-        # 10,10 split table = N → fallback hard 20 → S
         assert get_basic_strategy(h, dealer) == "S"
-        assert get_action(h, dealer, "basic_deviations", 4.0) == "Y"
+        assert get_action(h, dealer, "basic_deviations", 4.0) == "S"
 
-    def test_13_vs_2_negative_tc_overrides_stand(self):
-        """Basic: S. Déviation TC=-1: H."""
+    def test_14_vs_10_tc3_overrides_basic(self):
+        """Basic: H (or SUR if available). Deviation TC=3: S."""
+        h = hard_hand("10", "4")
+        dealer = up("10")
+        assert get_action(h, dealer, "basic_deviations", 3.0) == "S"
+
+    def test_15_vs_9_tc2_overrides_basic(self):
+        """Basic: H. Deviation TC=2: S."""
+        h = hard_hand("10", "5")
+        dealer = up("9")
+        assert get_action(h, dealer, "basic_deviations", 2.0) == "S"
+
+    def test_13_vs_2_below_threshold_overrides_stand(self):
+        """Basic: S. TC=-1.5 < -1 → deviation fires: H."""
         h = hard_hand("7", "6")
         dealer = up("2")
         assert get_basic_strategy(h, dealer) == "S"
-        assert get_action(h, dealer, "basic_deviations", -1.0) == "H"
+        assert get_action(h, dealer, "basic_deviations", -1.5) == "H"
 
-    def test_12_vs_4_tc_zero_overrides_stand(self):
-        """Basic: S. Déviation TC=0: H."""
+    def test_13_vs_2_at_threshold_uses_basic(self):
+        """TC=-1.0 is NOT < -1 → basic strategy: S."""
+        h = hard_hand("7", "6")
+        dealer = up("2")
+        assert get_action(h, dealer, "basic_deviations", -1.0) == "S"
+
+    def test_12_vs_4_tc_zero_uses_basic(self):
+        """TC=0.0 is NOT < 0 → basic strategy: S (no longer overrides)."""
         h = hard_hand("7", "5")
         dealer = up("4")
         assert get_basic_strategy(h, dealer) == "S"
-        assert get_action(h, dealer, "basic_deviations", 0.0) == "H"
+        assert get_action(h, dealer, "basic_deviations", 0.0) == "S"
+
+    def test_12_vs_4_negative_tc_overrides_stand(self):
+        """TC=-0.5 < 0 → deviation fires: H."""
+        h = hard_hand("7", "5")
+        dealer = up("4")
+        assert get_action(h, dealer, "basic_deviations", -0.5) == "H"
 
     def test_12_vs_4_positive_tc_uses_basic(self):
-        """TC=0.5 > 0 → pas de déviation → S (basic)."""
+        """TC=0.5 > 0 → no deviation → S (basic)."""
         h = hard_hand("7", "5")
         dealer = up("4")
         assert get_action(h, dealer, "basic_deviations", 0.5) == "S"

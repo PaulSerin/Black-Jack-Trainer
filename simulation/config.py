@@ -90,6 +90,9 @@ class SimConfig:
     rules:            TableRules    = field(default_factory=TableRules)
     initial_bankroll: float         = 10_000.0
     seed:             Optional[int] = None
+    use_deviations:   bool          = False   # True = Illustrious 18 on top of basic strategy
+    track_history:    bool          = False   # True = record bankroll snapshots every N rounds
+    history_interval: int           = 500     # sample bankroll every N rounds (if track_history)
 
     def __post_init__(self) -> None:
         if self.hands < 1:
@@ -140,6 +143,9 @@ class SimulationResult:
     # ── Dispersion ────────────────────────────────────────────────────────
     profit_std:        float   # écart-type du profit par main (en €)
     profit_std_units:  float   # écart-type normalisé par unit_size
+
+    # ── Historique bankroll (optionnel) ───────────────────────────────────
+    bankroll_history:  list    = field(default_factory=list)  # [(round_index, bankroll), ...]
 
     def summary(self) -> str:
         """Résumé lisible en une page."""

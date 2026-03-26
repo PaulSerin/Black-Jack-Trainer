@@ -176,6 +176,31 @@ def get_basic_strategy(hand: Hand, dealer_upcard: Card) -> str:
 
 
 # ---------------------------------------------------------------------------
+# get_action — unified entry point (basic or basic+deviations)
+# ---------------------------------------------------------------------------
+
+def get_action(
+    hand: Hand,
+    dealer_upcard: Card,
+    strategy_mode: str,
+    true_count: float = 0.0,
+) -> str:
+    """
+    Return the recommended action for the given hand.
+
+    strategy_mode:
+      "basic"            → basic strategy only
+      "basic_deviations" → Illustrious 18 deviations override basic if TC justifies it
+    """
+    if strategy_mode == "basic_deviations":
+        from simulation.deviations import get_deviation
+        dev = get_deviation(hand, dealer_upcard, true_count)
+        if dev is not None:
+            return dev
+    return get_basic_strategy(hand, dealer_upcard)
+
+
+# ---------------------------------------------------------------------------
 # CLI de vérification
 # ---------------------------------------------------------------------------
 

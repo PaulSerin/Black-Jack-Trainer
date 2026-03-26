@@ -1,745 +1,861 @@
-// ============================================================
-// blackjack.jsx — Blackjack Trainer Pro (Phase 1)
-// Interface React complète en un seul fichier.
-// ============================================================
+// blackjack.jsx — Blackjack Trainer Pro
+import { useState, useMemo, useEffect } from 'react'
 
-import { useState, useMemo } from 'react'
+// ── Constants ────────────────────────────────────────────────
+const NUM_DECKS   = 6
+const PENETRATION = 0.75
+const INIT_BANK   = 1000
+const MIN_BET     = 10
+const MAX_BET     = 500
+const BET_STEP    = 10
 
-// ── 1. Constantes ─────────────────────────────────────────
-
-const NUM_DECKS    = 6
-const PENETRATION  = 0.75
-const INIT_BANK    = 1000
-const MIN_BET      = 10
-const MAX_BET      = 500
-const BET_STEP     = 10
-
-const SUITS = ['clubs', 'diamonds', 'hearts', 'spades']
+const SUITS = ['clubs','diamonds','hearts','spades']
 const RANKS = ['2','3','4','5','6','7','8','9','10','jack','queen','king','ace']
-
 const RANK_VALUES = {
   '2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,
   '10':10,'jack':10,'queen':10,'king':10,'ace':11,
 }
-
-// Upcards dans l'ordre des tables de strategy (index 0–9)
 const UPCARD_ORDER = ['2','3','4','5','6','7','8','9','10','ace']
+const IMG_BASE = 'https://raw.githubusercontent.com/hanhaechi/playing-cards/master/'
+const BACK_URL = `${IMG_BASE}back_dark.png`
+const RANK_IMG = {
+  'ace':'A','2':'2','3':'3','4':'4','5':'5','6':'6',
+  '7':'7','8':'8','9':'9','10':'10','jack':'J','queen':'Q','king':'K',
+}
 
-// ── 2. Logique de jeu pure ────────────────────────────────
-
+// ── Pure game logic ───────────────────────────────────────────
 function buildDeck() {
   const cards = []
   for (let d = 0; d < NUM_DECKS; d++)
-    for (const suit of SUITS)
-      for (const rank of RANKS)
-        cards.push({ rank, suit, id: `${d}-${rank}-${suit}` })
+    for (const s of SUITS)
+      for (const r of RANKS)
+        cards.push({ rank: r, suit: s, id: `${d}-${r}-${s}` })
   return cards
 }
 
-function shuffleDeck(deck) {
+function shuffle(deck) {
   const d = [...deck]
   for (let i = d.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [d[i], d[j]] = [d[j], d[i]]
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[d[i], d[j]] = [d[j], d[i]]
   }
   return d
 }
 
-function cardVal(card) { return RANK_VALUES[card.rank] }
+const cardVal = c => RANK_VALUES[c.rank]
 
 function handValue(cards) {
-  let total = cards.reduce((s, c) => s + cardVal(c), 0)
-  let aces  = cards.filter(c => c.rank === 'ace').length
-  while (total > 21 && aces-- > 0) total -= 10
-  return total
+  let v = cards.reduce((s, c) => s + cardVal(c), 0)
+  let a = cards.filter(c => c.rank === 'ace').length
+  while (v > 21 && a-- > 0) v -= 10
+  return v
 }
 
 function isSoft(cards) {
-  let total = cards.reduce((s, c) => s + cardVal(c), 0)
-  let aces  = cards.filter(c => c.rank === 'ace').length
-  while (total > 21 && aces > 0) { total -= 10; aces-- }
-  return aces > 0 && total <= 21
+  let v = cards.reduce((s, c) => s + cardVal(c), 0)
+  let a = cards.filter(c => c.rank === 'ace').length
+  while (v > 21 && a > 0) { v -= 10; a-- }
+  return a > 0 && v <= 21
 }
 
-function isBlackjack(cards, isSplitHand = false) {
-  return !isSplitHand && cards.length === 2 && handValue(cards) === 21
-}
+const isBlackjack = (cards, split = false) =>
+  !split && cards.length === 2 && handValue(cards) === 21
+const isBust    = cards => handValue(cards) > 21
+const canDouble = cards => cards.length === 2
+const canSplit  = cards => cards.length === 2 && cardVal(cards[0]) === cardVal(cards[1])
+const canSurr   = (cards, split) => !split && cards.length === 2
 
-function isBust(cards) { return handValue(cards) > 21 }
+// ── Hi-Lo ────────────────────────────────────────────────────
+const hiLo = c =>
+  ['2','3','4','5','6'].includes(c.rank) ? 1
+  : ['7','8','9'].includes(c.rank) ? 0 : -1
+const roundHalf = x => Math.floor(x * 2 + 0.5) / 2
+const calcTC    = (rc, dl) => dl > 0 ? roundHalf(rc / dl) : 0
 
-function canDouble(cards)            { return cards.length === 2 }
-function canSplit(cards)             { return cards.length === 2 && cardVal(cards[0]) === cardVal(cards[1]) }
-function canSurrender(cards, split)  { return cards.length === 2 && !split }
-
-// Hi-Lo
-function hiLoVal(card) {
-  if (['2','3','4','5','6'].includes(card.rank)) return  1
-  if (['7','8','9'].includes(card.rank))         return  0
-  return -1
-}
-
-function roundHalf(x) { return Math.floor(x * 2 + 0.5) / 2 }
-function trueCount(rc, decksLeft) {
-  return decksLeft > 0 ? roundHalf(rc / decksLeft) : 0
-}
-
-// ── 3. Basic strategy (transcription de strategy.py) ──────
-
+// ── Basic strategy ────────────────────────────────────────────
 const _H = {
-  8:  ['H','H','H','H','H','H','H','H','H','H'],
-  9:  ['H','D','D','D','D','H','H','H','H','H'],
-  10: ['D','D','D','D','D','D','D','D','H','H'],
-  11: ['D','D','D','D','D','D','D','D','D','H'],
-  12: ['H','H','S','S','S','H','H','H','H','H'],
-  13: ['S','S','S','S','S','H','H','H','H','H'],
-  14: ['S','S','S','S','S','H','H','H','H','H'],
-  15: ['S','S','S','S','S','H','H','H','SUR','SUR'],
-  16: ['S','S','S','S','S','H','H','SUR','SUR','SUR'],
-  17: ['S','S','S','S','S','S','S','S','S','S'],
+  8: ['H','H','H','H','H','H','H','H','H','H'],
+  9: ['H','D','D','D','D','H','H','H','H','H'],
+  10:['D','D','D','D','D','D','D','D','H','H'],
+  11:['D','D','D','D','D','D','D','D','D','H'],
+  12:['H','H','S','S','S','H','H','H','H','H'],
+  13:['S','S','S','S','S','H','H','H','H','H'],
+  14:['S','S','S','S','S','H','H','H','H','H'],
+  15:['S','S','S','S','S','H','H','H','SUR','SUR'],
+  16:['S','S','S','S','S','H','H','SUR','SUR','SUR'],
+  17:['S','S','S','S','S','S','S','S','S','S'],
 }
 const _SOFT = {
-  2:  ['H','H','H','D','D','H','H','H','H','H'],
-  3:  ['H','H','H','D','D','H','H','H','H','H'],
-  4:  ['H','H','D','D','D','H','H','H','H','H'],
-  5:  ['H','H','D','D','D','H','H','H','H','H'],
-  6:  ['H','D','D','D','D','H','H','H','H','H'],
-  7:  ['Ds','Ds','Ds','Ds','Ds','S','S','H','H','H'],
-  8:  ['S','S','S','S','Ds','S','S','S','S','S'],
-  9:  ['S','S','S','S','S','S','S','S','S','S'],
+  2:['H','H','H','D','D','H','H','H','H','H'],
+  3:['H','H','H','D','D','H','H','H','H','H'],
+  4:['H','H','D','D','D','H','H','H','H','H'],
+  5:['H','H','D','D','D','H','H','H','H','H'],
+  6:['H','D','D','D','D','H','H','H','H','H'],
+  7:['Ds','Ds','Ds','Ds','Ds','S','S','H','H','H'],
+  8:['S','S','S','S','Ds','S','S','S','S','S'],
+  9:['S','S','S','S','S','S','S','S','S','S'],
 }
 const _SPLIT = {
-  11: ['Y','Y','Y','Y','Y','Y','Y','Y','Y','Y'],
-  10: ['N','N','N','N','N','N','N','N','N','N'],
-  9:  ['Y','Y','Y','Y','Y','S','Y','Y','S','S'],
-  8:  ['Y','Y','Y','Y','Y','Y','Y','Y','Y','Y'],
-  7:  ['Y','Y','Y','Y','Y','Y','N','N','N','N'],
-  6:  ['Y/N','Y','Y','Y','Y','N','N','N','N','N'],
-  5:  ['N','N','N','N','N','N','N','N','N','N'],
-  4:  ['N','N','N','Y/N','Y/N','N','N','N','N','N'],
-  3:  ['Y/N','Y/N','Y','Y','Y','Y','N','N','N','N'],
-  2:  ['Y/N','Y/N','Y','Y','Y','Y','N','N','N','N'],
+  11:['Y','Y','Y','Y','Y','Y','Y','Y','Y','Y'],
+  10:['N','N','N','N','N','N','N','N','N','N'],
+  9: ['Y','Y','Y','Y','Y','S','Y','Y','S','S'],
+  8: ['Y','Y','Y','Y','Y','Y','Y','Y','Y','Y'],
+  7: ['Y','Y','Y','Y','Y','Y','N','N','N','N'],
+  6: ['Y/N','Y','Y','Y','Y','N','N','N','N','N'],
+  5: ['N','N','N','N','N','N','N','N','N','N'],
+  4: ['N','N','N','Y/N','Y/N','N','N','N','N','N'],
+  3: ['Y/N','Y/N','Y','Y','Y','Y','N','N','N','N'],
+  2: ['Y/N','Y/N','Y','Y','Y','Y','N','N','N','N'],
 }
 
-function normalizeRank(rank) {
-  return ['jack','queen','king'].includes(rank) ? '10' : rank
-}
+const normRank = r => ['jack','queen','king'].includes(r) ? '10' : r
 
-function basicStrategyHint(playerCards, dealerUpcard) {
-  const upNorm = normalizeRank(dealerUpcard.rank)
-  const ui = UPCARD_ORDER.indexOf(upNorm)
+function basicHint(pCards, dCard) {
+  const ui = UPCARD_ORDER.indexOf(normRank(dCard.rank))
   if (ui === -1) return 'H'
-
-  const total  = handValue(playerCards)
-  const soft   = isSoft(playerCards)
-  const isPair = canSplit(playerCards)
-
-  // 1. Pairs
-  if (isPair) {
-    const pv  = cardVal(playerCards[0])
-    const row = _SPLIT[pv]
-    if (row) {
-      const a = row[ui]
-      if (a !== 'N') return a
-    }
-    // N → traiter comme hard
+  const total = handValue(pCards), soft = isSoft(pCards)
+  if (canSplit(pCards)) {
+    const row = _SPLIT[cardVal(pCards[0])]
+    if (row && row[ui] !== 'N') return row[ui]
   }
-
-  // 2. Soft
   if (soft) {
     const ap = total - 11
-    if (ap >= 2 && ap <= 9) { const row = _SOFT[ap]; if (row) return row[ui] }
+    if (ap >= 2 && ap <= 9 && _SOFT[ap]) return _SOFT[ap][ui]
   }
-
-  // 3. Hard
-  if (total <= 7)  return 'H'
+  if (total <= 7) return 'H'
   if (total >= 18) return 'S'
-  const row = _H[total]
-  return row ? row[ui] : 'S'
+  return _H[total]?.[ui] ?? 'S'
 }
 
-// ── 4. Helpers UI ─────────────────────────────────────────
+// ── Illustrious 18 deviations ─────────────────────────────────
+const I18 = [
+  { val:16, up:'10',  op:'>=', thr: 0, action:'S'   },
+  { val:15, up:'10',  op:'>=', thr: 4, action:'S'   },
+  { val:10, up:'10',  op:'>=', thr: 4, action:'D'   },
+  { val:12, up:'3',   op:'>=', thr: 2, action:'S'   },
+  { val:12, up:'2',   op:'>=', thr: 3, action:'S'   },
+  { val:11, up:'ace', op:'>=', thr: 1, action:'D'   },
+  { val: 9, up:'2',   op:'>=', thr: 1, action:'D'   },
+  { val:10, up:'ace', op:'>=', thr: 4, action:'D'   },
+  { val: 9, up:'7',   op:'>=', thr: 3, action:'D'   },
+  { val:16, up:'9',   op:'>=', thr: 5, action:'S'   },
+  { val:14, up:'10',  op:'>=', thr: 3, action:'S'   },
+  { val:15, up:'9',   op:'>=', thr: 2, action:'S'   },
+  { val:13, up:'2',   op:'<',  thr:-1, action:'H'   },
+  { val:12, up:'4',   op:'<',  thr: 0, action:'H'   },
+  { val:12, up:'5',   op:'<',  thr:-2, action:'H'   },
+  { val:12, up:'6',   op:'<',  thr:-1, action:'H'   },
+  { val:13, up:'3',   op:'<',  thr:-2, action:'H'   },
+]
 
-const ACTION_COLOR = {
-  S: 'bg-green-500 text-white',
-  H: 'bg-yellow-400 text-gray-900',
-  D: 'bg-blue-500 text-white',
-  Ds:'bg-blue-400 text-white',
-  Y: 'bg-orange-500 text-white',
-  'Y/N':'bg-orange-400 text-white',
-  SUR:'bg-red-500 text-white',
-}
-const ACTION_LABEL = {
-  S:'Stand', H:'Hit', D:'Double', Ds:'Double / Stand',
-  Y:'Split', 'Y/N':'Split (if DAS)', SUR:'Surrender',
-}
-
-// Rotation déterministe par id de carte (±3°)
-function cardRotation(id) {
-  const h = [...id].reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0)
-  return ((Math.abs(h) % 7) - 3)
-}
-
-// ── 5. Sous-composants ────────────────────────────────────
-
-const CARD_IMG_BASE = 'https://raw.githubusercontent.com/hanhaechi/playing-cards/master/'
-
-// Mapping vers le format du repo : {suit}_{rank}.png
-const RANK_TO_IMG = {
-  'ace':'A', '2':'2', '3':'3', '4':'4', '5':'5', '6':'6',
-  '7':'7', '8':'8', '9':'9', '10':'10',
-  'jack':'J', 'queen':'Q', 'king':'K',
-}
-
-function cardImgUrl(card) {
-  return `${CARD_IMG_BASE}${card.suit}_${RANK_TO_IMG[card.rank]}.png`
-}
-
-function CardImg({ card, faceDown }) {
-  const rot = useMemo(() => cardRotation(card?.id ?? 'back'), [card?.id])
-
-  const style = { transform: `rotate(${rot}deg)` }
-  const cls   = 'w-14 h-20 md:w-16 md:h-24 rounded-lg shadow-md object-cover select-none flex-shrink-0'
-
-  if (faceDown || !card) {
-    return (
-      <img
-        src={`${CARD_IMG_BASE}back_dark.png`}
-        alt="Carte cachée"
-        style={style}
-        className={cls}
-      />
-    )
+function deviationHint(pCards, dCard, tc) {
+  if (canSplit(pCards) || isSoft(pCards)) return null
+  const basic = basicHint(pCards, dCard)
+  const up = normRank(dCard.rank), total = handValue(pCards)
+  for (const d of I18) {
+    if (d.up !== up || total !== d.val) continue
+    // Les indices I18 "Stand vs Hit" ne s'appliquent pas quand basic = SUR :
+    // ils ont été calibrés pour jeux sans surrender (basic=Hit), pas pour remplacer SUR.
+    if (basic === 'SUR' && d.action === 'S') continue
+    if (d.op === '>=' ? tc >= d.thr : tc < d.thr) return d.action
   }
+  return null
+}
 
+function getHint(pCards, dCard, tc) {
+  if (!pCards?.length || !dCard) return null
+  const basic = basicHint(pCards, dCard)
+  const dev   = deviationHint(pCards, dCard, tc)
+  return { action: dev ?? basic, isDeviation: dev !== null && dev !== basic, basic }
+}
+
+// ── Action metadata ───────────────────────────────────────────
+const ACTION = {
+  S:    { label:'Stand',           bg:'bg-emerald-500', fg:'text-white' },
+  H:    { label:'Hit',             bg:'bg-amber-400',   fg:'text-gray-900' },
+  D:    { label:'Double Down',     bg:'bg-blue-500',    fg:'text-white' },
+  Ds:   { label:'Double or Stand', bg:'bg-blue-400',    fg:'text-white' },
+  Y:    { label:'Split',           bg:'bg-orange-500',  fg:'text-white' },
+  'Y/N':{ label:'Split (if DAS)',  bg:'bg-orange-400',  fg:'text-white' },
+  SUR:  { label:'Surrender',       bg:'bg-red-500',     fg:'text-white' },
+}
+
+// ── Card component ────────────────────────────────────────────
+function CardImg({ card, faceDown, animCls = '', animDelay = 0 }) {
+  const src = faceDown || !card
+    ? BACK_URL
+    : `${IMG_BASE}${card.suit}_${RANK_IMG[card.rank]}.png`
   return (
-    <img
-      src={cardImgUrl(card)}
-      alt={`${card.rank} of ${card.suit}`}
-      style={style}
-      className={cls}
-    />
+    <div
+      className={`flex-shrink-0 rounded-lg overflow-hidden shadow-xl ${animCls}`}
+      style={animCls ? { animationDelay: `${animDelay}s`, animationFillMode:'both' } : undefined}
+    >
+      <img src={src} alt={faceDown ? '?' : card ? `${card.rank} ${card.suit}` : '?'}
+        className="w-14 h-20 md:w-16 md:h-24 object-cover block" />
+    </div>
   )
 }
 
-function HandDisplay({ cards, label, hideFirst = false, active = false }) {
-  const total = hideFirst ? handValue(cards.slice(1)) : handValue(cards)
-  const soft  = !hideFirst && isSoft(cards) && total < 21
+// ── Hand display ──────────────────────────────────────────────
+function HandDisplay({ cards, label, hideFirst = false, active = false,
+                       result = null, bet = 0, revealCount = Infinity, isRevealing = false }) {
+  const shown  = cards.slice(0, Math.min(cards.length, revealCount))
+  const total  = hideFirst ? handValue(shown.slice(1)) : handValue(shown)
+  const soft   = !hideFirst && isSoft(shown) && total < 21
+  const bust   = !hideFirst && shown.length > 0 && isBust(shown)
+  const bj     = !hideFirst && shown.length > 0 && isBlackjack(shown)
+
+  const ring = result === 'win' || result === 'bj'
+    ? 'ring-2 ring-emerald-400 bg-emerald-900/20'
+    : result === 'lose'
+    ? 'ring-2 ring-red-400/70 bg-red-900/15'
+    : result === 'push'
+    ? 'ring-2 ring-yellow-400/50'
+    : active
+    ? 'ring-2 ring-white/40 bg-white/5'
+    : ''
 
   return (
-    <div className={`flex flex-col items-center gap-2 p-2 rounded-xl transition-all
-      ${active ? 'ring-2 ring-yellow-400 bg-green-700/40' : ''}`}>
-      <span className="text-white/70 text-xs font-semibold tracking-widest uppercase">
-        {label}
-      </span>
-      <div className="flex gap-1 flex-wrap justify-center min-h-20">
-        {cards.map((card, i) => (
-          <CardImg key={card.id} card={card} faceDown={hideFirst && i === 0} />
-        ))}
+    <div className={`flex flex-col items-center gap-1.5 px-3 py-2 rounded-xl transition-all duration-300 ${ring}`}>
+      <div className="flex items-center gap-1.5">
+        <span className="text-white/50 text-xs uppercase tracking-wider font-semibold">{label}</span>
+        {bet > 0 && <span className="text-yellow-400/60 text-xs font-bold">{bet}€</span>}
       </div>
-      {cards.length > 0 && (
-        <span className="text-white font-bold text-lg">
-          {hideFirst ? '?' : `${total}${soft ? ' (soft)' : ''}`}
-        </span>
+      <div className="flex gap-1 flex-wrap justify-center" style={{ minHeight:'5rem' }}>
+        {shown.map((card, i) => {
+          const fd  = hideFirst && i === 0
+          const cls = isRevealing
+            ? (i === 0 ? 'card-flip' : i >= 2 ? 'card-deal' : '')
+            : ''
+          return (
+            <CardImg key={fd ? `back-${card.id}` : card.id}
+              card={card} faceDown={fd} animCls={cls} animDelay={0} />
+          )
+        })}
+      </div>
+      {shown.length > 0 && (
+        <div className="font-bold text-lg leading-none flex items-center gap-1.5 text-white">
+          {hideFirst
+            ? <span className="text-white/25">?</span>
+            : <>
+                <span>{total}</span>
+                {soft && <span className="text-white/35 text-sm font-normal">soft</span>}
+                {bust && <span className="text-red-400 text-sm ml-1">Bust</span>}
+                {bj   && <span className="text-yellow-300 text-sm ml-1">BJ!</span>}
+              </>
+          }
+        </div>
       )}
     </div>
   )
 }
 
+// ── Hint box ──────────────────────────────────────────────────
 function HintBox({ hint }) {
   if (!hint) return null
-  const cls   = ACTION_COLOR[hint] ?? 'bg-gray-500 text-white'
-  const label = ACTION_LABEL[hint] ?? hint
+  const m = ACTION[hint.action] ?? { label: hint.action, bg:'bg-gray-600', fg:'text-white' }
   return (
-    <div className={`px-5 py-2 rounded-xl font-bold text-base shadow-lg ${cls} animate-pulse`}>
-      💡 Suggestion : {label}
+    <div className={`flex flex-col gap-0.5 px-4 py-2.5 rounded-xl font-bold shadow-lg ${m.bg} ${m.fg} min-w-36`}>
+      <div className="text-xs font-normal opacity-70">
+        {hint.isDeviation ? '★ I18 Deviation' : 'Basic Strategy'}
+      </div>
+      <div className="text-base">{m.label}</div>
+      {hint.isDeviation && (
+        <div className="text-xs font-normal opacity-55">
+          (basic: {ACTION[hint.basic]?.label ?? hint.basic})
+        </div>
+      )}
     </div>
   )
 }
 
-function CounterDisplay({ rc, tc }) {
-  const rcColor = rc > 0 ? 'text-green-400' : rc < 0 ? 'text-red-400' : 'text-white'
-  const tcColor = tc > 0 ? 'text-green-400' : tc < 0 ? 'text-red-400' : 'text-white'
+// ── Covered panel (vignette révélable au clic) ───────────────
+function CoveredPanel({ children, hidden, onToggle, label, icon = '🔒', className = '' }) {
   return (
-    <div className="bg-black/40 rounded-xl px-4 py-3 flex flex-col gap-1 min-w-32">
-      <span className="text-white/50 text-xs font-semibold tracking-widest uppercase">Hi-Lo</span>
-      <div className="flex justify-between items-center gap-4">
-        <span className="text-white/70 text-xs">RC</span>
-        <span className={`font-bold text-lg ${rcColor}`}>{rc > 0 ? '+' : ''}{rc}</span>
+    <div className={`relative cursor-pointer select-none ${className}`} onClick={onToggle}>
+      {children}
+      <div
+        className="absolute inset-0 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all duration-300"
+        style={{
+          backdropFilter: hidden ? 'blur(8px)' : 'blur(0px)',
+          backgroundColor: hidden ? 'rgba(0,0,0,0.72)' : 'rgba(0,0,0,0)',
+          opacity: hidden ? 1 : 0,
+          pointerEvents: hidden ? 'auto' : 'none',
+          border: hidden ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
+        }}
+      >
+        <span className="text-lg">{icon}</span>
+        <span className="text-white/50 text-xs font-bold uppercase tracking-widest">{label}</span>
+        <span className="text-white/25 text-xs">cliquer pour voir</span>
       </div>
-      <div className="flex justify-between items-center gap-4">
-        <span className="text-white/70 text-xs">TC</span>
-        <span className={`font-bold text-lg ${tcColor}`}>{tc > 0 ? '+' : ''}{tc.toFixed(1)}</span>
-      </div>
+      {/* "cacher" indicator when shown */}
+      {!hidden && (
+        <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+          title="Cacher">
+          <span className="text-white/40 text-xs">✕</span>
+        </div>
+      )}
     </div>
   )
 }
 
-function BetPanel({ bankroll, bet, onChange, disabled }) {
-  const canDecrease = !disabled && bet > MIN_BET
-  const canIncrease = !disabled && bet < Math.min(MAX_BET, bankroll)
+// ── Hi-Lo counter ─────────────────────────────────────────────
+function Counter({ rc, tc }) {
+  const tcCls = tc >= 3 ? 'text-emerald-400'
+    : tc >= 1 ? 'text-lime-400'
+    : tc <= -3 ? 'text-red-400'
+    : tc < 0 ? 'text-orange-400' : 'text-white'
   return (
-    <div className="bg-black/40 rounded-xl px-4 py-3 flex flex-col gap-2 min-w-44">
-      <span className="text-white/50 text-xs font-semibold tracking-widest uppercase">Bankroll</span>
-      <span className="text-yellow-400 font-bold text-2xl">{bankroll.toFixed(0)}€</span>
-      <div className="flex items-center gap-2">
-        <span className="text-white/70 text-xs mr-1">Mise</span>
-        <button onClick={() => onChange(Math.max(MIN_BET, bet - BET_STEP))}
-          disabled={!canDecrease}
-          className="w-7 h-7 bg-white/20 hover:bg-white/30 disabled:opacity-30 rounded-md text-white font-bold text-sm">
-          −
-        </button>
-        <span className="text-white font-bold min-w-12 text-center">{bet}€</span>
-        <button onClick={() => onChange(Math.min(MAX_BET, Math.min(bankroll, bet + BET_STEP)))}
-          disabled={!canIncrease}
-          className="w-7 h-7 bg-white/20 hover:bg-white/30 disabled:opacity-30 rounded-md text-white font-bold text-sm">
-          +
-        </button>
+    <div className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 flex flex-col gap-1 min-w-36">
+      <span className="text-white/40 text-xs font-bold tracking-widest uppercase">Hi-Lo</span>
+      <div className="flex justify-between items-baseline">
+        <span className="text-white/40 text-xs">Running</span>
+        <span className={`font-black text-xl ${rc > 0 ? 'text-lime-400' : rc < 0 ? 'text-red-400' : 'text-white'}`}>
+          {rc > 0 ? '+' : ''}{rc}
+        </span>
       </div>
+      <div className="flex justify-between items-baseline">
+        <span className="text-white/40 text-xs">True</span>
+        <span className={`font-black text-xl ${tcCls}`}>
+          {tc > 0 ? '+' : ''}{tc.toFixed(1)}
+        </span>
+      </div>
+      {Math.abs(tc) >= 1 && (
+        <div className={`text-xs text-center ${tcCls} opacity-70`}>
+          {tc >= 1 ? '▲ Favorable' : '▼ Défavorable'}
+        </div>
+      )}
     </div>
   )
 }
 
-// ── 6. Composant App ──────────────────────────────────────
+// ── Action button ─────────────────────────────────────────────
+const BTN_STYLES = {
+  Hit:       'bg-amber-500 hover:bg-amber-400 text-gray-900',
+  Stand:     'bg-emerald-600 hover:bg-emerald-500 text-white',
+  Double:    'bg-blue-600 hover:bg-blue-500 text-white',
+  Split:     'bg-orange-600 hover:bg-orange-500 text-white',
+  Surrender: 'bg-red-700 hover:bg-red-600 text-white',
+}
 
+function ActionBtn({ label, onClick, enabled }) {
+  return (
+    <button
+      onClick={enabled ? onClick : undefined}
+      disabled={!enabled}
+      className={`px-4 py-2.5 font-bold rounded-xl shadow transition-all text-sm
+        ${BTN_STYLES[label]}
+        ${!enabled ? 'opacity-30 cursor-not-allowed' : 'active:scale-95'}`}
+    >
+      {label}
+    </button>
+  )
+}
+
+// ── App ───────────────────────────────────────────────────────
 export default function App() {
-  // ─ Sabot ─
-  const [shoe,      setShoe]      = useState(() => shuffleDeck(buildDeck()))
-  const [shoeIdx,   setShoeIdx]   = useState(0)
+  // ─ Shoe ─
+  const [shoe,    setShoe]    = useState(() => shuffle(buildDeck()))
+  const [shoeIdx, setShoeIdx] = useState(0)
+  const [rc,      setRc]      = useState(0)
 
-  // ─ Comptage ─
-  const [rc,  setRc]  = useState(0)
-
-  // ─ Jeu ─
-  const [playerHands,   setPlayerHands]   = useState([])
-  const [activeIdx,     setActiveIdx]     = useState(0)
-  const [dealerCards,   setDealerCards]   = useState([])
-  const [phase,         setPhase]         = useState('betting') // betting|playing|result
-  const [dealerHidden,  setDealerHidden]  = useState(true)
-  const [isSplit,       setIsSplit]       = useState(false)
+  // ─ Hands ─
+  const [playerHands,    setPlayerHands]    = useState([])
+  const [activeIdx,      setActiveIdx]      = useState(0)
+  const [dealerCards,    setDealerCards]    = useState([])
+  const [isSplitGame,    setIsSplitGame]    = useState(false)
+  const [surrendered,    setSurrendered]    = useState([])
+  // preHandResults: hands resolved before playing phase (BJ while dealer no BJ)
+  // null = unresolved, 'bj' | 'push' | 'lose' = already settled
+  const [preHandResults, setPreHandResults] = useState([])
 
   // ─ Bankroll ─
-  const [bankroll,  setBankroll]  = useState(INIT_BANK)
-  const [bet,       setBet]       = useState(MIN_BET)
-  const [bets,      setBets]      = useState([MIN_BET])  // par main
+  const [bankroll, setBankroll] = useState(INIT_BANK)
+  const [bet,      setBet]      = useState(MIN_BET)
+  const [bets,     setBets]     = useState([MIN_BET])
+  const [numHands, setNumHands] = useState(1)
 
-  // ─ UI ─
-  const [hint,      setHint]      = useState(null)
-  const [showHint,  setShowHint]  = useState(false)
-  const [resultMsg, setResultMsg] = useState('')
-  const [delta,     setDelta]     = useState(0)
+  // ─ Phase & animation ─
+  const [phase,         setPhase]         = useState('betting')
+  const [revealCount,   setRevealCount]   = useState(0)
+  const [pendingResult, setPendingResult] = useState(null)
 
-  // ─ Dérivés ─
-  const decksLeft = (shoe.length - shoeIdx) / 52
-  const tc        = useMemo(() => trueCount(rc, decksLeft), [rc, decksLeft])
+  // ─ Result display ─
+  const [resultMsg,   setResultMsg]   = useState('')
+  const [delta,       setDelta]       = useState(0)
+  const [handResults, setHandResults] = useState([])
+
+  // ─ UI toggles ─
+  const [showHint,    setShowHint]    = useState(true)
+  const [showCounter, setShowCounter] = useState(true)
+
+  // ─ Derived ─
+  const decksLeft  = (shoe.length - shoeIdx) / 52
+  const tc         = useMemo(() => calcTC(rc, decksLeft), [rc, decksLeft])
   const activeHand = playerHands[activeIdx] ?? []
+  const upcard     = dealerCards[1] ?? null
 
-  // ─────────────────────────────────────────────────────────
-  // Utilitaire : distribuer une carte (gère la pénétration)
-  // Retourne { card, newShoe, newIdx, newRc, reshuffled }
-  // ─────────────────────────────────────────────────────────
-  function dealOne(currentShoe, currentIdx, currentRc) {
-    let s = currentShoe, i = currentIdx, r = currentRc
-    let reshuffled = false
+  const hint = useMemo(() => {
+    if (phase !== 'playing' || !upcard || !activeHand.length) return null
+    // Don't show hint for pre-resolved hands
+    if (preHandResults[activeIdx] != null) return null
+    return getHint(activeHand, upcard, tc)
+  }, [phase, activeHand, upcard, tc, activeIdx, preHandResults])
+
+  const showInsurance = phase === 'playing' && upcard?.rank === 'ace' && tc >= 3
+
+  // ─ Dealer reveal animation ────────────────────────────────
+  useEffect(() => {
+    if (phase !== 'revealing') return
+    const t = setTimeout(() => {
+      if (revealCount >= dealerCards.length) {
+        if (pendingResult) {
+          setBankroll(prev => prev + pendingResult.bankrollReturn)
+          setResultMsg(pendingResult.msg)
+          setDelta(pendingResult.displayDelta)
+          setHandResults(pendingResult.results)
+        }
+        setPhase('result')
+      } else {
+        setRevealCount(n => n + 1)
+      }
+    }, 450)
+    return () => clearTimeout(t)
+  }, [phase, revealCount, dealerCards.length, pendingResult])
+
+  // ─ Shoe helpers ───────────────────────────────────────────
+  function draw(s, i, r) {
     if (i >= Math.floor(s.length * PENETRATION)) {
-      s = shuffleDeck(buildDeck())
-      i = 0
-      r = 0
-      reshuffled = true
+      s = shuffle(buildDeck()); i = 0; r = 0
     }
-    return { card: s[i], newShoe: s, newIdx: i + 1, newRc: r, reshuffled }
+    return { card: s[i], shoe: s, idx: i + 1, rcBefore: r }
   }
 
-  // ─────────────────────────────────────────────────────────
-  // Jouer la main du dealer + résoudre toutes les mains
-  // (tout synchrone, un seul batch de state updates)
-  // ─────────────────────────────────────────────────────────
-  function resolveDealer(hands, dCards, currentRc, currentShoe, currentIdx, handBets, wasSplit) {
-    let s   = currentShoe
-    let idx = currentIdx
-    let r   = currentRc
-    let dHand = [...dCards]
-
-    // Révéler la carte cachée
-    r += hiLoVal(dHand[0])
-
-    // Dealer tire selon S17
-    while (true) {
-      const v    = handValue(dHand)
-      const soft = isSoft(dHand)
-      if (v >= 17 && !(v === 17 && soft && false)) break  // stands on soft 17
-      const result = dealOne(s, idx, r)
-      if (result.reshuffled) r = 0
-      s   = result.newShoe
-      idx = result.newIdx
-      r  += hiLoVal(result.card)
-      dHand.push(result.card)
+  // ─ Compute full dealer hand ───────────────────────────────
+  function computeDealer(dCards, curRc, curShoe, curIdx) {
+    let s = curShoe, i = curIdx, r = curRc
+    const hand = [...dCards]
+    r += hiLo(hand[0])
+    while (handValue(hand) < 17) {
+      const d = draw(s, i, r)
+      s = d.shoe; i = d.idx; r = d.rcBefore + hiLo(d.card)
+      hand.push(d.card)
     }
+    return { hand, newShoe: s, newIdx: i, newRc: r }
+  }
+
+  // ─ Start dealer reveal ────────────────────────────────────
+  function startReveal(hands, dCards, curRc, curShoe, curIdx, handBets, wasSplit, surr, preRes) {
+    // Only draw if at least one non-pre-resolved, non-bust, non-surrendered hand exists
+    const needsDraw = hands.some((h, i) =>
+      preRes[i] == null && !surr.includes(i) && !isBust(h)
+    )
+    const { hand: dHand, newShoe, newIdx, newRc } = needsDraw
+      ? computeDealer(dCards, curRc, curShoe, curIdx)
+      : { hand: dCards, newShoe: curShoe, newIdx: curIdx, newRc: curRc + hiLo(dCards[0]) }
 
     const dTotal = handValue(dHand)
-    const dBust  = dTotal > 21
-    let   totalDelta = 0
-    const msgs = []
+    const dBJ    = isBlackjack(dCards)
 
-    hands.forEach((hand, i) => {
-      const b      = handBets[i] ?? handBets[0]
+    let bankrollReturn = 0, displayDelta = 0
+    const msgs = [], results = []
+
+    hands.forEach((hand, hi) => {
+      const b = handBets[hi] ?? handBets[0]
+
+      // Pre-resolved BJ hands (bankroll already applied in startHand)
+      if (preRes[hi] != null) {
+        const gain = Math.floor(b * 1.5)
+        results.push(preRes[hi])
+        if (preRes[hi] === 'bj') {
+          displayDelta += gain
+          msgs.push(hands.length > 1 ? `M${hi+1}: BJ +${gain}€` : `Blackjack! +${gain}€`)
+        } else if (preRes[hi] === 'push') {
+          msgs.push(hands.length > 1 ? `M${hi+1}: Push BJ` : 'Push — Both BJ')
+        } else {
+          displayDelta -= b
+          msgs.push(hands.length > 1 ? `M${hi+1}: Dealer BJ` : 'Dealer Blackjack')
+        }
+        return
+      }
+
+      // Surrendered
+      if (surr.includes(hi)) {
+        results.push('lose'); displayDelta -= b / 2
+        msgs.push(hands.length > 1 ? `M${hi+1}: Surrender` : 'Surrender')
+        return
+      }
+
       const pTotal = handValue(hand)
-      const pBust  = isBust(hand)
       const pBJ    = isBlackjack(hand, wasSplit)
-      const dBJ    = isBlackjack(dCards)  // utilise les cartes originales (2 cartes)
 
-      if (pBust) {
-        msgs.push(hands.length > 1 ? `M${i+1}: Bust` : 'Bust')
+      if (isBust(hand)) {
+        results.push('lose'); displayDelta -= b
+        msgs.push(hands.length > 1 ? `M${hi+1}: Bust` : 'Bust')
       } else if (pBJ && !dBJ) {
-        const gain = b + Math.floor(b * 1.5)
-        setBankroll(prev => prev + gain)
-        totalDelta += gain - b
-        msgs.push(`Blackjack! +${Math.floor(b * 1.5)}€`)
+        const gain = Math.floor(b * 1.5)
+        bankrollReturn += b + gain; displayDelta += gain
+        results.push('bj')
+        msgs.push(hands.length > 1 ? `M${hi+1}: BJ +${gain}€` : `Blackjack! +${gain}€`)
       } else if (dBJ && !pBJ) {
-        msgs.push(hands.length > 1 ? `M${i+1}: Dealer BJ` : 'Dealer Blackjack')
+        results.push('lose'); displayDelta -= b
+        msgs.push(hands.length > 1 ? `M${hi+1}: Dealer BJ` : 'Dealer Blackjack')
       } else if (pBJ && dBJ) {
-        setBankroll(prev => prev + b)
+        bankrollReturn += b; results.push('push')
         msgs.push('Push — Both BJ')
-      } else if (dBust || pTotal > dTotal) {
-        setBankroll(prev => prev + b * 2)
-        totalDelta += b
-        msgs.push(hands.length > 1 ? `M${i+1}: Win +${b}€` : `Win +${b}€`)
+      } else if (dTotal > 21 || pTotal > dTotal) {
+        bankrollReturn += b * 2; displayDelta += b
+        results.push('win')
+        msgs.push(hands.length > 1 ? `M${hi+1}: +${b}€` : `Win +${b}€`)
       } else if (pTotal < dTotal) {
-        msgs.push(hands.length > 1 ? `M${i+1}: Lose` : 'Lose')
-        totalDelta -= b
+        results.push('lose'); displayDelta -= b
+        msgs.push(hands.length > 1 ? `M${hi+1}: Lose` : 'Lose')
       } else {
-        setBankroll(prev => prev + b)
-        msgs.push(hands.length > 1 ? `M${i+1}: Push` : 'Push')
+        bankrollReturn += b; results.push('push')
+        msgs.push(hands.length > 1 ? `M${hi+1}: Push` : 'Push')
       }
     })
 
     setDealerCards(dHand)
-    setDealerHidden(false)
-    setShoe(s)
-    setShoeIdx(idx)
-    setRc(r)
-    setDelta(totalDelta)
-    setResultMsg(msgs.join('  ·  '))
-    setPhase('result')
+    setShoe(newShoe); setShoeIdx(newIdx); setRc(newRc)
+    setPendingResult({ bankrollReturn, displayDelta, msg: msgs.join('  ·  '), results })
+    setRevealCount(2)
+    setPhase('revealing')
   }
 
-  // ─────────────────────────────────────────────────────────
-  // Passer à la main suivante ou au dealer
-  // ─────────────────────────────────────────────────────────
-  function advance(hands, currentActiveIdx, dCards, currentRc, currentShoe, currentIdx, handBets, wasSplit) {
-    const next = currentActiveIdx + 1
+  // ─ Advance to next hand or reveal ─────────────────────────
+  function advance(hands, curIdx, dCards, curRc, curShoe, curShoIdx, handBets, wasSplit, surr, preRes) {
+    let next = curIdx + 1
+    // Skip pre-resolved hands (BJ)
+    while (next < hands.length && preRes[next] != null) next++
     if (next < hands.length) {
       setActiveIdx(next)
     } else {
-      resolveDealer(hands, dCards, currentRc, currentShoe, currentIdx, handBets, wasSplit)
+      startReveal(hands, dCards, curRc, curShoe, curShoIdx, handBets, wasSplit, surr, preRes)
     }
   }
 
-  // ─────────────────────────────────────────────────────────
-  // Distribuer une nouvelle donne
-  // ─────────────────────────────────────────────────────────
+  // ─ Start hand ────────────────────────────────────────────
   function startHand() {
-    let s = shoe, i = shoeIdx, r = rc
+    const total = bet * numHands
+    if (bankroll < total) return
 
-    // Mélange si pénétration atteinte
+    let s = shoe, i = shoeIdx, r = rc
     if (i >= Math.floor(s.length * PENETRATION)) {
-      s = shuffleDeck(buildDeck())
-      i = 0
-      r = 0
+      s = shuffle(buildDeck()); i = 0; r = 0
     }
 
-    // 4 cartes : p1, d_hole, p2, d_up
-    const p1 = s[i++], dHole = s[i++], p2 = s[i++], dUp = s[i++]
+    // Traditional deal order
+    const handCards = Array.from({ length: numHands }, () => [])
+    for (let h = 0; h < numHands; h++) handCards[h].push(s[i++])
+    const hole = s[i++]
+    for (let h = 0; h < numHands; h++) handCards[h].push(s[i++])
+    const up = s[i++]
+    const dHand = [hole, up]
 
-    // Compter cartes visibles (joueur + upcard dealer)
-    r += hiLoVal(p1) + hiLoVal(p2) + hiLoVal(dUp)
+    for (let h = 0; h < numHands; h++)
+      r += hiLo(handCards[h][0]) + hiLo(handCards[h][1])
+    r += hiLo(up)
 
-    const pHand  = [p1, p2]
-    const dHand  = [dHole, dUp]
-    const initBet = bet
+    const handBets = Array(numHands).fill(bet)
+    setBankroll(prev => prev - total)
+    setShoe(s); setShoeIdx(i); setRc(r)
+    setPlayerHands(handCards); setDealerCards(dHand)
+    setActiveIdx(0); setBets(handBets)
+    setSurrendered([]); setIsSplitGame(false)
+    setResultMsg(''); setDelta(0); setHandResults([])
+    setPendingResult(null)
 
-    setBankroll(prev => prev - initBet)
-    setShoe(s)
-    setShoeIdx(i)
-    setRc(r)
-    setPlayerHands([pHand])
-    setDealerCards(dHand)
-    setActiveIdx(0)
-    setDealerHidden(true)
-    setBets([initBet])
-    setHint(null)
-    setShowHint(false)
-    setResultMsg('')
-    setDelta(0)
-    setIsSplit(false)
+    const pBJs = handCards.map(h => isBlackjack(h))
+    const dBJ  = isBlackjack(dHand)
 
-    // Blackjack immédiat ?
-    const pBJ = isBlackjack(pHand)
-    const dBJ = isBlackjack(dHand)
-    if (pBJ || dBJ) {
-      const rFinal = r + hiLoVal(dHole)
-      setRc(rFinal)
-      setDealerHidden(false)
-      // Résoudre directement
-      const dBJCheck = dBJ
-      const pBJCheck = pBJ
-      let totalDelta = 0, msg = ''
-      if (pBJCheck && dBJCheck) {
-        setBankroll(prev => prev + initBet)
-        msg = 'Push — Both Blackjack!'
-      } else if (pBJCheck) {
-        const gain = initBet + Math.floor(initBet * 1.5)
-        setBankroll(prev => prev + gain)
-        totalDelta = Math.floor(initBet * 1.5)
-        msg = `Blackjack! +${Math.floor(initBet * 1.5)}€`
-      } else {
-        msg = 'Dealer Blackjack.'
-        totalDelta = -initBet
-      }
-      setDelta(totalDelta)
-      setResultMsg(msg)
-      setPhase('result')
+    if (dBJ) {
+      // Dealer BJ — all hands end immediately via revealing
+      setRc(r + hiLo(hole))
+      const preRes = Array(numHands).fill(null)
+      let bankrollReturn = 0, displayDelta = 0
+      const msgs = [], results = []
+      handCards.forEach((_h, hi) => {
+        const b = bet
+        if (pBJs[hi]) {
+          bankrollReturn += b; results.push('push'); preRes[hi] = 'push'
+          msgs.push(numHands > 1 ? `M${hi+1}: Push BJ` : 'Push — Both Blackjack!')
+        } else {
+          displayDelta -= b; results.push('lose'); preRes[hi] = 'lose'
+          msgs.push(numHands > 1 ? `M${hi+1}: Dealer BJ` : 'Dealer Blackjack')
+        }
+      })
+      setPreHandResults(preRes)
+      setPendingResult({ bankrollReturn, displayDelta, msg: msgs.join('  ·  '), results })
+      setRevealCount(2)
+      setPhase('revealing')
+
+    } else if (pBJs.every(Boolean)) {
+      // All player hands BJ, dealer no BJ — all win via revealing
+      const preRes = Array(numHands).fill('bj')
+      let bankrollReturn = 0, displayDelta = 0
+      const msgs = []
+      handCards.forEach((_h, hi) => {
+        const gain = Math.floor(bet * 1.5)
+        bankrollReturn += bet + gain; displayDelta += gain
+        msgs.push(numHands > 1 ? `M${hi+1}: BJ +${gain}€` : `Blackjack! +${gain}€`)
+      })
+      setPreHandResults(preRes)
+      setPendingResult({ bankrollReturn, displayDelta, msg: msgs.join('  ·  '), results: preRes })
+      setRevealCount(2)
+      setPhase('revealing')
+
+    } else if (pBJs.some(Boolean)) {
+      // Mixed: some hands BJ, some not — apply BJ wins now, play the rest
+      const preRes = pBJs.map(bj => bj ? 'bj' : null)
+      let bjReturn = 0
+      pBJs.forEach((bj, hi) => {
+        if (bj) bjReturn += bet + Math.floor(bet * 1.5)
+      })
+      setBankroll(prev => prev + bjReturn)
+      setPreHandResults(preRes)
+      setHandResults(preRes)  // show BJ result on those hands immediately
+      // Start at first non-BJ hand
+      const firstPlayable = pBJs.findIndex(bj => !bj)
+      setActiveIdx(firstPlayable)
+      setPhase('playing')
+
     } else {
+      // Normal — no BJ anywhere
+      setPreHandResults(Array(numHands).fill(null))
       setPhase('playing')
     }
   }
 
-  // ─────────────────────────────────────────────────────────
-  // Actions joueur
-  // ─────────────────────────────────────────────────────────
+  // ─ Player actions ─────────────────────────────────────────
   function doHit() {
-    const result = dealOne(shoe, shoeIdx, rc)
-    const newRc  = result.reshuffled ? hiLoVal(result.card) : rc + hiLoVal(result.card)
-    const newHand = [...activeHand, result.card]
+    const d = draw(shoe, shoeIdx, rc)
+    const newRc    = d.rcBefore + hiLo(d.card)
+    const newHand  = [...activeHand, d.card]
     const newHands = playerHands.map((h, i) => i === activeIdx ? newHand : h)
-
-    setShoe(result.newShoe)
-    setShoeIdx(result.newIdx)
-    setRc(newRc)
-    setPlayerHands(newHands)
-    setHint(null)
-    setShowHint(false)
-
-    if (isBust(newHand)) {
-      advance(newHands, activeIdx, dealerCards, newRc, result.newShoe, result.newIdx, bets, isSplit)
-    }
+    setShoe(d.shoe); setShoeIdx(d.idx); setRc(newRc); setPlayerHands(newHands)
+    if (isBust(newHand))
+      advance(newHands, activeIdx, dealerCards, newRc, d.shoe, d.idx, bets, isSplitGame, surrendered, preHandResults)
   }
 
   function doStand() {
-    setHint(null)
-    setShowHint(false)
-    advance(playerHands, activeIdx, dealerCards, rc, shoe, shoeIdx, bets, isSplit)
+    advance(playerHands, activeIdx, dealerCards, rc, shoe, shoeIdx, bets, isSplitGame, surrendered, preHandResults)
   }
 
   function doDouble() {
-    if (!canDouble(activeHand)) return
-    const result = dealOne(shoe, shoeIdx, rc)
-    const newRc   = result.reshuffled ? hiLoVal(result.card) : rc + hiLoVal(result.card)
-    const newHand = [...activeHand, result.card]
+    if (!canDouble(activeHand) || bankroll < bets[activeIdx]) return
+    const d = draw(shoe, shoeIdx, rc)
+    const newRc    = d.rcBefore + hiLo(d.card)
+    const newHand  = [...activeHand, d.card]
     const newHands = playerHands.map((h, i) => i === activeIdx ? newHand : h)
     const newBets  = bets.map((b, i) => i === activeIdx ? b * 2 : b)
-
-    setBankroll(prev => prev - bets[activeIdx])  // mise supplémentaire
-    setShoe(result.newShoe)
-    setShoeIdx(result.newIdx)
-    setRc(newRc)
-    setPlayerHands(newHands)
-    setBets(newBets)
-    setHint(null)
-    setShowHint(false)
-
-    // Après un double : stand obligatoire
-    advance(newHands, activeIdx, dealerCards, newRc, result.newShoe, result.newIdx, newBets, isSplit)
+    setBankroll(prev => prev - bets[activeIdx])
+    setShoe(d.shoe); setShoeIdx(d.idx); setRc(newRc)
+    setPlayerHands(newHands); setBets(newBets)
+    advance(newHands, activeIdx, dealerCards, newRc, d.shoe, d.idx, newBets, isSplitGame, surrendered, preHandResults)
   }
 
   function doSplit() {
-    if (!canSplit(activeHand) || playerHands.length >= 4) return
-
-    const r1 = dealOne(shoe, shoeIdx, rc)
-    const newRc1 = r1.reshuffled ? hiLoVal(r1.card) : rc + hiLoVal(r1.card)
-    const r2 = dealOne(r1.newShoe, r1.newIdx, newRc1)
-    const newRc2 = r2.reshuffled ? hiLoVal(r2.card) : newRc1 + hiLoVal(r2.card)
-
-    const hand1 = [activeHand[0], r1.card]
-    const hand2 = [activeHand[1], r2.card]
-    const newHands = [
-      ...playerHands.slice(0, activeIdx),
-      hand1, hand2,
-      ...playerHands.slice(activeIdx + 1),
-    ]
-    const newBets = [
-      ...bets.slice(0, activeIdx),
-      bets[activeIdx], bets[activeIdx],
-      ...bets.slice(activeIdx + 1),
-    ]
-
+    if (!canSplit(activeHand) || playerHands.length >= 4 || bankroll < bets[activeIdx]) return
+    const d1 = draw(shoe, shoeIdx, rc)
+    const rc1 = d1.rcBefore + hiLo(d1.card)
+    const d2  = draw(d1.shoe, d1.idx, rc1)
+    const rc2 = d2.rcBefore + hiLo(d2.card)
+    const h1 = [activeHand[0], d1.card], h2 = [activeHand[1], d2.card]
+    const newHands = [...playerHands.slice(0, activeIdx), h1, h2, ...playerHands.slice(activeIdx + 1)]
+    const newBets  = [...bets.slice(0, activeIdx), bets[activeIdx], bets[activeIdx], ...bets.slice(activeIdx + 1)]
+    // Expand preHandResults with null for the new split hand
+    const newPreRes = [...preHandResults.slice(0, activeIdx), null, null, ...preHandResults.slice(activeIdx + 1)]
     setBankroll(prev => prev - bets[activeIdx])
-    setShoe(r2.newShoe)
-    setShoeIdx(r2.newIdx)
-    setRc(newRc2)
-    setPlayerHands(newHands)
-    setBets(newBets)
-    setHint(null)
-    setShowHint(false)
-    setIsSplit(true)
-    // activeIdx reste sur la première main du split
+    setShoe(d2.shoe); setShoeIdx(d2.idx); setRc(rc2)
+    setPlayerHands(newHands); setBets(newBets); setIsSplitGame(true)
+    setPreHandResults(newPreRes)
   }
 
   function doSurrender() {
     const half = bets[activeIdx] / 2
-    setBankroll(prev => prev + half)  // rembourser la moitié
-    setDelta(-half)
-    setResultMsg(`Surrender. Perdu ${half}€`)
-    setPhase('result')
-    setHint(null)
-    setShowHint(false)
+    setBankroll(prev => prev + half)
+    const newSurr = [...surrendered, activeIdx]
+    setSurrendered(newSurr)
+    advance(playerHands, activeIdx, dealerCards, rc, shoe, shoeIdx, bets, isSplitGame, newSurr, preHandResults)
   }
 
-  function handleShowHint() {
-    if (dealerCards.length < 2) return
-    const upcard = dealerCards[1]  // deuxième carte = upcard
-    setHint(basicStrategyHint(activeHand, upcard))
-    setShowHint(true)
-  }
+  // ─ Availability ───────────────────────────────────────────
+  const playing = phase === 'playing'
+  const canDbl  = playing && canDouble(activeHand) && bankroll >= bets[activeIdx]
+  const canSpl  = playing && canSplit(activeHand) && playerHands.length < 4 && bankroll >= bets[activeIdx]
+  const canSur  = playing && canSurr(activeHand, isSplitGame)
 
-  // ─────────────────────────────────────────────────────────
-  // Actions disponibles
-  // ─────────────────────────────────────────────────────────
-  const playing       = phase === 'playing'
-  const canDbl        = playing && canDouble(activeHand) && bankroll >= bets[activeIdx]
-  const canSpl        = playing && canSplit(activeHand) && bankroll >= bets[activeIdx] && playerHands.length < 4
-  const canSur        = playing && canSurrender(activeHand, isSplit)
+  const dealerRevealCount = phase === 'result' ? Infinity : phase === 'playing' ? 2 : revealCount
 
-  // ─────────────────────────────────────────────────────────
-  // Rendu
-  // ─────────────────────────────────────────────────────────
+  // ─ Render ─────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-green-900 flex flex-col p-3 gap-3 select-none">
+    <>
+      <style>{`
+        @keyframes slideIn {
+          from { opacity:0; transform:translateY(-20px) scale(0.88); }
+          to   { opacity:1; transform:translateY(0) scale(1); }
+        }
+        @keyframes flipCard {
+          from { opacity:0; transform:perspective(500px) rotateY(90deg) scale(0.92); }
+          to   { opacity:1; transform:perspective(500px) rotateY(0deg) scale(1); }
+        }
+        .card-deal { animation: slideIn  0.35s cubic-bezier(0.34,1.5,0.64,1) both; }
+        .card-flip { animation: flipCard 0.45s cubic-bezier(0.25,0.8,0.25,1) both; }
+      `}</style>
 
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-white font-bold text-2xl tracking-wider">🂡 Blackjack Trainer</h1>
-          <p className="text-white/40 text-xs mt-0.5">6 decks · S17 · Hi-Lo</p>
-        </div>
-        <div className="flex gap-3 flex-wrap">
-          <CounterDisplay rc={rc} tc={tc} />
-          <BetPanel
-            bankroll={bankroll}
-            bet={bet}
-            onChange={setBet}
-            disabled={playing || phase === 'result'}
-          />
-        </div>
-      </div>
+      <div className="min-h-screen bg-gradient-to-b from-green-950 via-green-900 to-green-950 flex flex-col p-3 gap-3 select-none">
 
-      {/* ── Table ── */}
-      <div className="flex-1 flex flex-col gap-3 max-w-2xl mx-auto w-full">
-
-        {/* Zone dealer */}
-        <div className="bg-green-800/50 rounded-2xl p-4 flex flex-col items-center min-h-36">
-          {dealerCards.length > 0
-            ? <HandDisplay
-                cards={dealerCards}
-                label="Dealer"
-                hideFirst={dealerHidden && playing}
-              />
-            : <span className="text-white/30 text-sm mt-8">En attente…</span>
-          }
-        </div>
-
-        {/* Message résultat */}
-        {phase === 'result' && resultMsg && (
-          <div className={`text-center font-bold text-lg py-3 px-6 rounded-xl shadow-lg
-            ${delta > 0 ? 'bg-green-500 text-white'
-            : delta < 0 ? 'bg-red-500 text-white'
-            : 'bg-gray-500 text-white'}`}>
-            {resultMsg}
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-white font-black text-xl tracking-tight">Blackjack Trainer Pro</h1>
+            <p className="text-white/30 text-xs mt-0.5">6 decks · S17 · 3:2 · Hi-Lo</p>
           </div>
-        )}
-
-        {/* Zone joueur */}
-        <div className="bg-green-800/50 rounded-2xl p-4 flex flex-col items-center min-h-36">
-          {playerHands.length > 0 ? (
-            <div className="flex gap-4 flex-wrap justify-center">
-              {playerHands.map((hand, i) => (
-                <HandDisplay
-                  key={i}
-                  cards={hand}
-                  label={playerHands.length > 1 ? `Main ${i + 1}` : 'Vous'}
-                  active={playing && i === activeIdx}
-                />
-              ))}
+          <div className="flex gap-2 flex-wrap items-start">
+            <CoveredPanel hidden={!showCounter} onToggle={() => setShowCounter(v => !v)} label="Hi-Lo" icon="🃏">
+              <Counter rc={rc} tc={tc} />
+            </CoveredPanel>
+            {/* Bankroll */}
+            <div className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 flex flex-col gap-1.5 min-w-40">
+              <span className="text-white/40 text-xs font-bold tracking-widest uppercase">Bankroll</span>
+              <span className={`font-black text-2xl leading-none ${bankroll <= 0 ? 'text-red-400' : 'text-yellow-400'}`}>
+                {bankroll.toFixed(0)} €
+              </span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-white/40 text-xs">Mise</span>
+                <button onClick={() => setBet(v => Math.max(MIN_BET, v - BET_STEP))}
+                  disabled={phase !== 'betting' || bet <= MIN_BET}
+                  className="w-6 h-6 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded text-white text-sm font-bold transition-colors">−</button>
+                <span className="text-white font-bold text-sm min-w-10 text-center">{bet}€</span>
+                <button onClick={() => setBet(v => Math.min(MAX_BET, Math.min(bankroll, v + BET_STEP)))}
+                  disabled={phase !== 'betting' || bet >= Math.min(MAX_BET, bankroll)}
+                  className="w-6 h-6 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded text-white text-sm font-bold transition-colors">+</button>
+              </div>
             </div>
-          ) : (
-            <span className="text-white/30 text-sm mt-8">Placez votre mise et distribuez</span>
+          </div>
+        </div>
+
+        {/* ── Table ── */}
+        <div className="flex-1 flex flex-col gap-2 max-w-2xl mx-auto w-full">
+          <div className="bg-black/25 border border-white/5 rounded-2xl p-4 min-h-36 flex flex-col items-center justify-center">
+            {dealerCards.length > 0
+              ? <HandDisplay cards={dealerCards} label="Dealer"
+                  hideFirst={phase === 'playing'}
+                  revealCount={dealerRevealCount}
+                  isRevealing={phase === 'revealing'} />
+              : <span className="text-white/15 text-sm">Dealer</span>
+            }
+          </div>
+
+          {phase === 'result' && resultMsg && (
+            <div className={`text-center rounded-2xl py-3 px-5 font-black shadow-xl border
+              ${delta > 0 ? 'bg-emerald-600/90 border-emerald-500 text-white'
+              : delta < 0 ? 'bg-red-600/90 border-red-500 text-white'
+              : 'bg-gray-600/90 border-gray-500 text-white'}`}>
+              <div className="text-base">{resultMsg}</div>
+              {delta !== 0 && <div className="text-sm font-bold opacity-70 mt-0.5">Net : {delta > 0 ? `+${delta}€` : `${delta}€`}</div>}
+            </div>
           )}
+
+          <div className="bg-black/25 border border-white/5 rounded-2xl p-4 min-h-36 flex flex-col items-center justify-center">
+            {playerHands.length > 0
+              ? <div className="flex gap-3 flex-wrap justify-center">
+                  {[...playerHands].map((_, di) => {
+                    const i = playerHands.length - 1 - di  // Main 1 à droite
+                    return (
+                      <HandDisplay key={i} cards={playerHands[i]}
+                        label={playerHands.length > 1 ? `Main ${i+1}` : 'Vous'}
+                        active={playing && i === activeIdx}
+                        result={handResults[i] ?? null}
+                        bet={bets[i] ?? bet} />
+                    )
+                  })}
+                </div>
+              : <span className="text-white/15 text-sm">Vos mains</span>
+            }
+          </div>
+        </div>
+
+        {/* ── Controls ── */}
+        <div className="flex flex-col items-center gap-3 max-w-2xl mx-auto w-full">
+
+          {/* Playing: action buttons left + hint right */}
+          {playing && (
+            <div className="flex items-start gap-4 justify-center w-full">
+
+              {/* Action buttons — all 5 always visible */}
+              <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <ActionBtn label="Hit"    onClick={doHit}    enabled={true} />
+                  <ActionBtn label="Stand"  onClick={doStand}  enabled={true} />
+                  <ActionBtn label="Double" onClick={doDouble} enabled={canDbl} />
+                  <ActionBtn label="Split"  onClick={doSplit}  enabled={canSpl} />
+                </div>
+                <ActionBtn label="Surrender" onClick={doSurrender} enabled={canSur} />
+              </div>
+
+              {/* Hint panel */}
+              <CoveredPanel
+                hidden={!showHint}
+                onToggle={() => setShowHint(v => !v)}
+                label="Hint"
+                icon="💡"
+                className="min-w-36"
+              >
+                <div style={{ minHeight: '72px' }}>
+                  {hint
+                    ? <HintBox hint={hint} />
+                    : <div className="min-w-36 min-h-16 rounded-xl bg-black/20 border border-white/5" />
+                  }
+                  {showInsurance && (
+                    <div className="mt-1.5 bg-yellow-500/20 border border-yellow-400/40 rounded-xl px-3 py-2 text-yellow-300 text-xs font-bold">
+                      ★ TC{tc > 0 ? '+' : ''}{tc.toFixed(1)} ≥ +3<br/>Assurance
+                    </div>
+                  )}
+                </div>
+              </CoveredPanel>
+            </div>
+          )}
+
+          {/* Betting */}
+          {phase === 'betting' && (
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-white/40 text-sm">Mains :</span>
+                {[1,2,3].map(n => (
+                  <button key={n} onClick={() => setNumHands(n)}
+                    className={`w-10 h-10 rounded-xl font-bold text-lg transition-all
+                      ${numHands === n ? 'bg-yellow-500 text-gray-900 scale-110 shadow-lg' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+              {numHands > 1 && <p className="text-white/25 text-xs">{bet}€ × {numHands} = {bet * numHands}€</p>}
+              <button onClick={startHand} disabled={bankroll < bet * numHands}
+                className="px-14 py-4 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 active:scale-95 text-gray-900 font-black text-xl rounded-2xl shadow-xl transition-all">
+                Distribuer
+              </button>
+            </div>
+          )}
+
+          {phase === 'revealing' && (
+            <p className="text-white/30 text-sm animate-pulse">Dealer joue…</p>
+          )}
+
+          {phase === 'result' && (
+            <button onClick={() => { setPhase('betting'); setHandResults([]); setPendingResult(null) }}
+              className="px-14 py-4 bg-yellow-500 hover:bg-yellow-400 active:scale-95 text-gray-900 font-black text-xl rounded-2xl shadow-xl transition-all">
+              Main suivante →
+            </button>
+          )}
+
+          <p className="text-white/20 text-xs">
+            {shoe.length - shoeIdx} cartes · {decksLeft.toFixed(1)} decks restants
+            {shoeIdx >= Math.floor(shoe.length * PENETRATION * 0.9) && ' · Mélange prochain 🔀'}
+          </p>
         </div>
       </div>
-
-      {/* ── Actions ── */}
-      <div className="flex flex-col items-center gap-3 max-w-2xl mx-auto w-full">
-
-        {/* Hint */}
-        {showHint && hint && <HintBox hint={hint} />}
-
-        {/* Boutons de jeu */}
-        {playing && (
-          <div className="flex flex-wrap gap-2 justify-center">
-            <button onClick={doHit}
-              className="px-5 py-2.5 bg-yellow-500 hover:bg-yellow-400 active:bg-yellow-600 text-gray-900 font-bold rounded-xl shadow transition-colors">
-              Hit
-            </button>
-            <button onClick={doStand}
-              className="px-5 py-2.5 bg-green-500 hover:bg-green-400 active:bg-green-600 text-white font-bold rounded-xl shadow transition-colors">
-              Stand
-            </button>
-            {canDbl && (
-              <button onClick={doDouble}
-                className="px-5 py-2.5 bg-blue-500 hover:bg-blue-400 active:bg-blue-600 text-white font-bold rounded-xl shadow transition-colors">
-                Double
-              </button>
-            )}
-            {canSpl && (
-              <button onClick={doSplit}
-                className="px-5 py-2.5 bg-orange-500 hover:bg-orange-400 active:bg-orange-600 text-white font-bold rounded-xl shadow transition-colors">
-                Split
-              </button>
-            )}
-            {canSur && (
-              <button onClick={doSurrender}
-                className="px-5 py-2.5 bg-red-500 hover:bg-red-400 active:bg-red-600 text-white font-bold rounded-xl shadow transition-colors">
-                Surrender
-              </button>
-            )}
-            <button onClick={handleShowHint}
-              className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-bold rounded-xl shadow transition-colors">
-              💡 Hint
-            </button>
-          </div>
-        )}
-
-        {phase === 'betting' && (
-          <button onClick={startHand}
-            disabled={bankroll < bet}
-            className="px-14 py-4 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-gray-900 font-bold text-xl rounded-xl shadow-lg transition-colors">
-            Distribuer
-          </button>
-        )}
-
-        {phase === 'result' && (
-          <button onClick={() => setPhase('betting')}
-            className="px-14 py-4 bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold text-xl rounded-xl shadow-lg transition-colors">
-            Main suivante →
-          </button>
-        )}
-
-        {/* Info deck */}
-        <p className="text-white/30 text-xs">
-          Sabot : {shoe.length - shoeIdx} cartes restantes
-          {shoeIdx >= Math.floor(shoe.length * PENETRATION * 0.95) &&
-            ' · 🔀 Mélange prochain'}
-        </p>
-      </div>
-    </div>
+    </>
   )
 }
