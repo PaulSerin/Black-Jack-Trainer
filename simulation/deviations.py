@@ -82,7 +82,15 @@ ILLUSTRIOUS_18: list[Deviation] = [
     # 16 vs 9 : stand au lieu de H/SUR
     Deviation("16 vs 9",           "hard",       16, "9",  5.0, ">=", "S"),
 
-    # ── Negative deviations (TC <= seuil → changer l'action) ──────────────
+    # ── Pair splits (canonique I18 #4 et #5) ──────────────────────────────
+
+    # 10,10 vs 5 : splitter au lieu de S (TC >= +5)
+    Deviation("10,10 vs 5",        "pair",       10, "5",  5.0, ">=", "Y"),
+
+    # 10,10 vs 6 : splitter au lieu de S (TC >= +4)
+    Deviation("10,10 vs 6",        "pair",       10, "6",  4.0, ">=", "Y"),
+
+    # ── Negative deviations (TC < seuil → changer l'action) ───────────────
 
     # 13 vs 2 : hit au lieu de S  (TC < -1, i.e. TC <= -1.5)
     Deviation("13 vs 2",           "hard",       13, "2", -1.0, "<", "H"),
@@ -98,12 +106,6 @@ ILLUSTRIOUS_18: list[Deviation] = [
 
     # 13 vs 3 : hit au lieu de S  (TC < -2, i.e. TC <= -2.5)
     Deviation("13 vs 3",           "hard",       13, "3", -2.0, "<", "H"),
-
-    # 14 vs 10 : stand au lieu de H/SUR
-    Deviation("14 vs 10",          "hard",       14, "10", 3.0, ">=", "S"),
-
-    # 15 vs 9 : stand au lieu de H/SUR
-    Deviation("15 vs 9",           "hard",       15, "9",  2.0, ">=", "S"),
 ]
 
 assert len(ILLUSTRIOUS_18) == 18, f"I18 contient {len(ILLUSTRIOUS_18)} entrées, attendu 18"

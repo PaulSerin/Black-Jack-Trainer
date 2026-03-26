@@ -70,20 +70,25 @@ class TestI18Integrity:
         assert ins[0].tc_threshold == 3.0
         assert ins[0].action == "INS"
 
-    def test_no_pair_deviations(self):
-        # Illustrious 18 per image source: no pair splits, only hard + insurance
+    def test_two_pair_deviations(self):
+        # I18 canonique : 10,10 vs 5 (TC≥+5) et 10,10 vs 6 (TC≥+4)
         pairs = [d for d in ILLUSTRIOUS_18 if d.hand_type == "pair"]
-        assert len(pairs) == 0
+        assert len(pairs) == 2
+        situations = {d.situation for d in pairs}
+        assert "10,10 vs 5" in situations
+        assert "10,10 vs 6" in situations
 
-    def test_seventeen_hard_deviations(self):
-        # 1 insurance + 17 hard = 18
+    def test_fifteen_hard_deviations(self):
+        # 1 insurance + 2 pair + 15 hard = 18
         hards = [d for d in ILLUSTRIOUS_18 if d.hand_type == "hard"]
-        assert len(hards) == 17
+        assert len(hards) == 15
 
-    def test_14_vs_10_and_15_vs_9_present(self):
+    def test_pair_splits_present_not_non_canonical(self):
         situations = {d.situation for d in ILLUSTRIOUS_18}
-        assert "14 vs 10" in situations
-        assert "15 vs 9" in situations
+        assert "10,10 vs 5" in situations
+        assert "10,10 vs 6" in situations
+        assert "14 vs 10" not in situations
+        assert "15 vs 9" not in situations
 
     def test_positive_deviations_have_gte_operator(self):
         """Les déviations qui recommandent S/D/Y sur une action plus passive → >=."""
@@ -157,29 +162,39 @@ class TestEachDeviation:
         h = hard_hand("10", "5")
         assert get_deviation(h, up("10"), 3.5) is None
 
-    # ── 14 vs 10 ───────────────────────────────────────────────────────────
+    # ── 10,10 vs 5 (pair split, TC≥+5) ────────────────────────────────────
 
-    def test_14_vs_10_at_threshold(self):
-        h = hard_hand("10", "4")
-        assert get_deviation(h, up("10"), 3.0) == "S"
+    def test_1010_vs_5_at_threshold(self):
+        h = pair_hand("10")
+        assert get_deviation(h, up("5"), 5.0) == "Y"
 
-    def test_14_vs_10_below_threshold(self):
-        h = hard_hand("10", "4")
-        assert get_deviation(h, up("10"), 2.5) is None
+    def test_1010_vs_5_below_threshold(self):
+        h = pair_hand("10")
+        assert get_deviation(h, up("5"), 4.5) is None
 
-    def test_14_vs_10_above_threshold(self):
-        h = hard_hand("10", "4")
-        assert get_deviation(h, up("10"), 5.0) == "S"
+    def test_1010_vs_5_above_threshold(self):
+        h = pair_hand("10")
+        assert get_deviation(h, up("5"), 7.0) == "Y"
 
-    # ── 15 vs 9 ────────────────────────────────────────────────────────────
+    def test_1010_vs_5_not_triggered_for_99(self):
+        """9,9 est une paire mais sa valeur (9) ne matche pas player_value=10."""
+        h = pair_hand("9")
+        assert get_deviation(h, up("5"), 6.0) is None
 
-    def test_15_vs_9_at_threshold(self):
-        h = hard_hand("10", "5")
-        assert get_deviation(h, up("9"), 2.0) == "S"
+    # ── 10,10 vs 6 (pair split, TC≥+4) ────────────────────────────────────
 
-    def test_15_vs_9_below_threshold(self):
-        h = hard_hand("10", "5")
-        assert get_deviation(h, up("9"), 1.5) is None
+    def test_1010_vs_6_at_threshold(self):
+        h = pair_hand("10")
+        assert get_deviation(h, up("6"), 4.0) == "Y"
+
+    def test_1010_vs_6_below_threshold(self):
+        h = pair_hand("10")
+        assert get_deviation(h, up("6"), 3.5) is None
+
+    def test_1010_vs_6_not_triggered_for_77_vs_6(self):
+        """7,7 vs 6 ne doit pas déclencher la déviation 10,10."""
+        h = pair_hand("7")
+        assert get_deviation(h, up("6"), 5.0) is None
 
     # ── Hard 10 vs 10 ──────────────────────────────────────────────────────
 
@@ -432,24 +447,30 @@ class TestDeviationOverridesBasicStrategy:
         assert get_basic_strategy(h, dealer) == "H"
         assert get_action(h, dealer, "basic_deviations", 1.0) == "D"
 
-    def test_10_10_vs_6_no_deviation(self):
-        """10,10 pair split deviation removed — basic strategy S applies at any TC."""
+    def test_10_10_vs_6_tc4_splits(self):
+        """I18 canonique : 10,10 vs 6 splitte à TC≥+4."""
         h = pair_hand("10")
         dealer = up("6")
         assert get_basic_strategy(h, dealer) == "S"
-        assert get_action(h, dealer, "basic_deviations", 4.0) == "S"
+        assert get_action(h, dealer, "basic_deviations", 4.0) == "Y"
 
-    def test_14_vs_10_tc3_overrides_basic(self):
-        """Basic: H (or SUR if available). Deviation TC=3: S."""
-        h = hard_hand("10", "4")
-        dealer = up("10")
-        assert get_action(h, dealer, "basic_deviations", 3.0) == "S"
+    def test_10_10_vs_6_below_threshold_stands(self):
+        """TC=3.5 < 4 → pas de déviation → basic strategy S."""
+        h = pair_hand("10")
+        dealer = up("6")
+        assert get_action(h, dealer, "basic_deviations", 3.5) == "S"
 
-    def test_15_vs_9_tc2_overrides_basic(self):
-        """Basic: H. Deviation TC=2: S."""
-        h = hard_hand("10", "5")
-        dealer = up("9")
-        assert get_action(h, dealer, "basic_deviations", 2.0) == "S"
+    def test_10_10_vs_5_tc5_splits(self):
+        """I18 canonique : 10,10 vs 5 splitte à TC≥+5."""
+        h = pair_hand("10")
+        dealer = up("5")
+        assert get_action(h, dealer, "basic_deviations", 5.0) == "Y"
+
+    def test_10_10_vs_5_below_threshold_stands(self):
+        """TC=4.5 < 5 → pas de déviation → basic strategy S."""
+        h = pair_hand("10")
+        dealer = up("5")
+        assert get_action(h, dealer, "basic_deviations", 4.5) == "S"
 
     def test_13_vs_2_below_threshold_overrides_stand(self):
         """Basic: S. TC=-1.5 < -1 → deviation fires: H."""
