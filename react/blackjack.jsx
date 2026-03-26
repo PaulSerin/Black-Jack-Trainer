@@ -129,31 +129,33 @@ function basicHint(pCards, dCard) {
 
 // ── Illustrious 18 deviations ─────────────────────────────────
 const I18 = [
-  { val:16, up:'10',  op:'>=', thr: 0, action:'S'   },
-  { val:15, up:'10',  op:'>=', thr: 4, action:'S'   },
-  { val:10, up:'10',  op:'>=', thr: 4, action:'D'   },
-  { val:12, up:'3',   op:'>=', thr: 2, action:'S'   },
-  { val:12, up:'2',   op:'>=', thr: 3, action:'S'   },
-  { val:11, up:'ace', op:'>=', thr: 1, action:'D'   },
-  { val: 9, up:'2',   op:'>=', thr: 1, action:'D'   },
-  { val:10, up:'ace', op:'>=', thr: 4, action:'D'   },
-  { val: 9, up:'7',   op:'>=', thr: 3, action:'D'   },
-  { val:16, up:'9',   op:'>=', thr: 5, action:'S'   },
-  { val:14, up:'10',  op:'>=', thr: 3, action:'S'   },
-  { val:15, up:'9',   op:'>=', thr: 2, action:'S'   },
-  { val:13, up:'2',   op:'<',  thr:-1, action:'H'   },
-  { val:12, up:'4',   op:'<',  thr: 0, action:'H'   },
-  { val:12, up:'5',   op:'<',  thr:-2, action:'H'   },
-  { val:12, up:'6',   op:'<',  thr:-1, action:'H'   },
-  { val:13, up:'3',   op:'<',  thr:-2, action:'H'   },
+  { val:16, up:'10',  op:'>=', thr: 0, action:'S', pair:false },
+  { val:15, up:'10',  op:'>=', thr: 4, action:'S', pair:false },
+  { val:10, up:'10',  op:'>=', thr: 4, action:'D', pair:false },
+  { val:12, up:'3',   op:'>=', thr: 2, action:'S', pair:false },
+  { val:12, up:'2',   op:'>=', thr: 3, action:'S', pair:false },
+  { val:11, up:'ace', op:'>=', thr: 1, action:'D', pair:false },
+  { val: 9, up:'2',   op:'>=', thr: 1, action:'D', pair:false },
+  { val:10, up:'ace', op:'>=', thr: 4, action:'D', pair:false },
+  { val: 9, up:'7',   op:'>=', thr: 3, action:'D', pair:false },
+  { val:16, up:'9',   op:'>=', thr: 5, action:'S', pair:false },
+  { val:10, up:'5',   op:'>=', thr: 5, action:'Y', pair:true  },
+  { val:10, up:'6',   op:'>=', thr: 4, action:'Y', pair:true  },
+  { val:13, up:'2',   op:'<',  thr:-1, action:'H', pair:false },
+  { val:12, up:'4',   op:'<',  thr: 0, action:'H', pair:false },
+  { val:12, up:'5',   op:'<',  thr:-2, action:'H', pair:false },
+  { val:12, up:'6',   op:'<',  thr:-1, action:'H', pair:false },
+  { val:13, up:'3',   op:'<',  thr:-2, action:'H', pair:false },
 ]
 
 function deviationHint(pCards, dCard, tc) {
-  if (canSplit(pCards) || isSoft(pCards)) return null
+  if (isSoft(pCards)) return null
   const basic = basicHint(pCards, dCard)
   const up = normRank(dCard.rank), total = handValue(pCards)
+  const isPair = canSplit(pCards)
   for (const d of I18) {
     if (d.up !== up || total !== d.val) continue
+    if (d.pair !== isPair) continue
     // Les indices I18 "Stand vs Hit" ne s'appliquent pas quand basic = SUR :
     // ils ont été calibrés pour jeux sans surrender (basic=Hit), pas pour remplacer SUR.
     if (basic === 'SUR' && d.action === 'S') continue
@@ -286,12 +288,12 @@ function CoveredPanel({ children, hidden, onToggle, label, icon = '🔒', classN
       >
         <span className="text-lg">{icon}</span>
         <span className="text-white/50 text-xs font-bold uppercase tracking-widest">{label}</span>
-        <span className="text-white/25 text-xs">cliquer pour voir</span>
+        <span className="text-white/25 text-xs">click to reveal</span>
       </div>
       {/* "cacher" indicator when shown */}
       {!hidden && (
         <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-          title="Cacher">
+          title="Hide">
           <span className="text-white/40 text-xs">✕</span>
         </div>
       )}
@@ -322,7 +324,7 @@ function Counter({ rc, tc }) {
       </div>
       {Math.abs(tc) >= 1 && (
         <div className={`text-xs text-center ${tcCls} opacity-70`}>
-          {tc >= 1 ? '▲ Favorable' : '▼ Défavorable'}
+          {tc >= 1 ? '▲ Favorable' : '▼ Unfavorable'}
         </div>
       )}
     </div>
@@ -385,6 +387,10 @@ export default function App() {
   const [delta,       setDelta]       = useState(0)
   const [handResults, setHandResults] = useState([])
 
+  // ─ Insurance ─
+  const [insuranceTaken, setInsuranceTaken] = useState(false)
+  const [insuranceBet,   setInsuranceBet]   = useState(0)
+
   // ─ UI toggles ─
   const [showHint,    setShowHint]    = useState(true)
   const [showCounter, setShowCounter] = useState(true)
@@ -402,7 +408,8 @@ export default function App() {
     return getHint(activeHand, upcard, tc)
   }, [phase, activeHand, upcard, tc, activeIdx, preHandResults])
 
-  const showInsurance = phase === 'playing' && upcard?.rank === 'ace' && tc >= 3
+  // Recommandation assurance : affichée pendant la phase 'insurance'
+  const insuranceHint = phase === 'insurance' ? (tc >= 3 ? 'take' : 'decline') : null
 
   // ─ Dealer reveal animation ────────────────────────────────
   useEffect(() => {
@@ -569,8 +576,15 @@ export default function App() {
     const pBJs = handCards.map(h => isBlackjack(h))
     const dBJ  = isBlackjack(dHand)
 
-    if (dBJ) {
-      // Dealer BJ — all hands end immediately via revealing
+    if (up.rank === 'ace') {
+      // Dealer montre un As : proposer l'assurance avant de regarder le trou
+      setPreHandResults(Array(numHands).fill(null))
+      setInsuranceTaken(false)
+      setInsuranceBet(0)
+      setPhase('insurance')
+
+    } else if (dBJ) {
+      // Dealer BJ (upcard != As) — all hands end immediately via revealing
       setRc(r + hiLo(hole))
       const preRes = Array(numHands).fill(null)
       let bankrollReturn = 0, displayDelta = 0
@@ -625,6 +639,85 @@ export default function App() {
       setPreHandResults(Array(numHands).fill(null))
       setPhase('playing')
     }
+  }
+
+  // ─ Insurance resolution ───────────────────────────────────
+  function resolveAfterInsurance(taken, insBet) {
+    const dBJ  = isBlackjack(dealerCards)
+    const pBJs = playerHands.map(h => isBlackjack(h))
+
+    if (dBJ) {
+      // Trou révélé → compter la hole card
+      setRc(prev => prev + hiLo(dealerCards[0]))
+      // Insurance paie 2:1 si prise
+      let bankrollReturn = taken ? insBet * 2 : 0
+      let displayDelta   = taken ? insBet : 0
+      const msgs = [], results = []
+      if (taken) msgs.push(`Insurance +${insBet}€`)
+      playerHands.forEach((_h, hi) => {
+        const b = bets[hi]
+        if (pBJs[hi]) {
+          bankrollReturn += b; results.push('push')
+          msgs.push(playerHands.length > 1 ? `M${hi+1}: Push BJ` : 'Push — Both BJ')
+        } else {
+          displayDelta -= b; results.push('lose')
+          msgs.push(playerHands.length > 1 ? `M${hi+1}: Dealer BJ` : 'Dealer Blackjack')
+        }
+      })
+      const preRes = playerHands.map((_, hi) => pBJs[hi] ? 'push' : 'lose')
+      setPreHandResults(preRes)
+      setPendingResult({ bankrollReturn, displayDelta, msg: msgs.join('  ·  '), results })
+      setRevealCount(2)
+      setPhase('revealing')
+
+    } else {
+      // Pas de BJ dealer — assurance perdue si prise (déjà déduite du bankroll)
+      const insMsgs = taken ? [`Insurance lost -${insBet}€`] : []
+
+      if (pBJs.every(Boolean)) {
+        const preRes = Array(playerHands.length).fill('bj')
+        let bankrollReturn = 0, displayDelta = taken ? -insBet : 0
+        const msgs = [...insMsgs]
+        playerHands.forEach((_h, hi) => {
+          const gain = Math.floor(bets[hi] * 1.5)
+          bankrollReturn += bets[hi] + gain; displayDelta += gain
+          msgs.push(playerHands.length > 1 ? `M${hi+1}: BJ +${gain}€` : `Blackjack! +${gain}€`)
+        })
+        setPreHandResults(preRes)
+        setPendingResult({ bankrollReturn, displayDelta, msg: msgs.join('  ·  '), results: preRes })
+        setRevealCount(2)
+        setPhase('revealing')
+
+      } else if (pBJs.some(Boolean)) {
+        const preRes = pBJs.map(bj => bj ? 'bj' : null)
+        let bjReturn = 0
+        pBJs.forEach((bj, hi) => { if (bj) bjReturn += bets[hi] + Math.floor(bets[hi] * 1.5) })
+        setBankroll(prev => prev + bjReturn)
+        setPreHandResults(preRes)
+        setHandResults(preRes)
+        const firstPlayable = pBJs.findIndex(bj => !bj)
+        setActiveIdx(firstPlayable)
+        setPhase('playing')
+
+      } else {
+        setPreHandResults(Array(playerHands.length).fill(null))
+        setPhase('playing')
+      }
+    }
+  }
+
+  function doTakeInsurance() {
+    const insBet = bets[0] / 2
+    setBankroll(prev => prev - insBet)
+    setInsuranceTaken(true)
+    setInsuranceBet(insBet)
+    resolveAfterInsurance(true, insBet)
+  }
+
+  function doDeclineInsurance() {
+    setInsuranceTaken(false)
+    setInsuranceBet(0)
+    resolveAfterInsurance(false, 0)
   }
 
   // ─ Player actions ─────────────────────────────────────────
@@ -716,6 +809,29 @@ export default function App() {
             <CoveredPanel hidden={!showCounter} onToggle={() => setShowCounter(v => !v)} label="Hi-Lo" icon="🃏">
               <Counter rc={rc} tc={tc} />
             </CoveredPanel>
+            {/* Hint panel — affiché dans le header pendant le jeu */}
+            {(phase === 'playing' || phase === 'insurance') && (
+              <CoveredPanel hidden={!showHint} onToggle={() => setShowHint(v => !v)} label="Hint" icon="💡" className="min-w-36">
+                <div style={{ minHeight: '64px' }}>
+                  {phase === 'insurance' && insuranceHint && (
+                    <div className={`rounded-xl px-3 py-2 text-xs font-bold ${
+                      insuranceHint === 'take'
+                        ? 'bg-yellow-500/20 border border-yellow-400/40 text-yellow-300'
+                        : 'bg-white/10 border border-white/10 text-white/60'
+                    }`}>
+                      {insuranceHint === 'take'
+                        ? `★ TC${tc >= 0 ? '+' : ''}${tc.toFixed(1)} ≥ +3 → Take Insurance`
+                        : `TC${tc >= 0 ? '+' : ''}${tc.toFixed(1)} < +3 → No Insurance`
+                      }
+                    </div>
+                  )}
+                  {phase === 'playing' && (hint
+                    ? <HintBox hint={hint} />
+                    : <div className="min-w-36 min-h-12 rounded-xl bg-black/20 border border-white/5" />
+                  )}
+                </div>
+              </CoveredPanel>
+            )}
             {/* Bankroll */}
             <div className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 flex flex-col gap-1.5 min-w-40">
               <span className="text-white/40 text-xs font-bold tracking-widest uppercase">Bankroll</span>
@@ -723,7 +839,7 @@ export default function App() {
                 {bankroll.toFixed(0)} €
               </span>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-white/40 text-xs">Mise</span>
+                <span className="text-white/40 text-xs">Bet</span>
                 <button onClick={() => setBet(v => Math.max(MIN_BET, v - BET_STEP))}
                   disabled={phase !== 'betting' || bet <= MIN_BET}
                   className="w-6 h-6 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded text-white text-sm font-bold transition-colors">−</button>
@@ -741,7 +857,7 @@ export default function App() {
           <div className="bg-black/25 border border-white/5 rounded-2xl p-4 min-h-36 flex flex-col items-center justify-center">
             {dealerCards.length > 0
               ? <HandDisplay cards={dealerCards} label="Dealer"
-                  hideFirst={phase === 'playing'}
+                  hideFirst={phase === 'playing' || phase === 'insurance'}
                   revealCount={dealerRevealCount}
                   isRevealing={phase === 'revealing'} />
               : <span className="text-white/15 text-sm">Dealer</span>
@@ -754,7 +870,7 @@ export default function App() {
               : delta < 0 ? 'bg-red-600/90 border-red-500 text-white'
               : 'bg-gray-600/90 border-gray-500 text-white'}`}>
               <div className="text-base">{resultMsg}</div>
-              {delta !== 0 && <div className="text-sm font-bold opacity-70 mt-0.5">Net : {delta > 0 ? `+${delta}€` : `${delta}€`}</div>}
+              {delta !== 0 && <div className="text-sm font-bold opacity-70 mt-0.5">Net: {delta > 0 ? `+${delta}€` : `${delta}€`}</div>}
             </div>
           )}
 
@@ -765,14 +881,14 @@ export default function App() {
                     const i = playerHands.length - 1 - di  // Main 1 à droite
                     return (
                       <HandDisplay key={i} cards={playerHands[i]}
-                        label={playerHands.length > 1 ? `Main ${i+1}` : 'Vous'}
+                        label={playerHands.length > 1 ? `Hand ${i+1}` : 'You'}
                         active={playing && i === activeIdx}
                         result={handResults[i] ?? null}
                         bet={bets[i] ?? bet} />
                     )
                   })}
                 </div>
-              : <span className="text-white/15 text-sm">Vos mains</span>
+              : <span className="text-white/15 text-sm">Your hands</span>
             }
           </div>
         </div>
@@ -780,41 +896,36 @@ export default function App() {
         {/* ── Controls ── */}
         <div className="flex flex-col items-center gap-3 max-w-2xl mx-auto w-full">
 
-          {/* Playing: action buttons left + hint right */}
+          {/* Playing: action buttons */}
           {playing && (
-            <div className="flex items-start gap-4 justify-center w-full">
-
-              {/* Action buttons — all 5 always visible */}
-              <div className="flex flex-col gap-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <ActionBtn label="Hit"    onClick={doHit}    enabled={true} />
-                  <ActionBtn label="Stand"  onClick={doStand}  enabled={true} />
-                  <ActionBtn label="Double" onClick={doDouble} enabled={canDbl} />
-                  <ActionBtn label="Split"  onClick={doSplit}  enabled={canSpl} />
-                </div>
-                <ActionBtn label="Surrender" onClick={doSurrender} enabled={canSur} />
+            <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <ActionBtn label="Hit"    onClick={doHit}    enabled={true} />
+                <ActionBtn label="Stand"  onClick={doStand}  enabled={true} />
+                <ActionBtn label="Double" onClick={doDouble} enabled={canDbl} />
+                <ActionBtn label="Split"  onClick={doSplit}  enabled={canSpl} />
               </div>
+              <ActionBtn label="Surrender" onClick={doSurrender} enabled={canSur} />
+            </div>
+          )}
 
-              {/* Hint panel */}
-              <CoveredPanel
-                hidden={!showHint}
-                onToggle={() => setShowHint(v => !v)}
-                label="Hint"
-                icon="💡"
-                className="min-w-36"
-              >
-                <div style={{ minHeight: '72px' }}>
-                  {hint
-                    ? <HintBox hint={hint} />
-                    : <div className="min-w-36 min-h-16 rounded-xl bg-black/20 border border-white/5" />
-                  }
-                  {showInsurance && (
-                    <div className="mt-1.5 bg-yellow-500/20 border border-yellow-400/40 rounded-xl px-3 py-2 text-yellow-300 text-xs font-bold">
-                      ★ TC{tc > 0 ? '+' : ''}{tc.toFixed(1)} ≥ +3<br/>Assurance
-                    </div>
-                  )}
-                </div>
-              </CoveredPanel>
+          {/* Insurance */}
+          {phase === 'insurance' && (
+            <div className="flex flex-col items-center gap-3">
+              <div className="bg-yellow-500/15 border border-yellow-400/30 rounded-2xl px-6 py-3 text-center">
+                <p className="text-yellow-300 font-bold text-base">Dealer shows Ace</p>
+                <p className="text-white/50 text-sm">Insurance pays 2:1 · bet: {bets[0] / 2}€</p>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={doTakeInsurance}
+                  className="px-6 py-3 bg-yellow-500 hover:bg-yellow-400 active:scale-95 text-gray-900 font-black rounded-xl shadow-xl transition-all">
+                  Take Insurance ({bets[0] / 2}€)
+                </button>
+                <button onClick={doDeclineInsurance}
+                  className="px-6 py-3 bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold rounded-xl transition-all">
+                  No Thanks
+                </button>
+              </div>
             </div>
           )}
 
@@ -822,7 +933,7 @@ export default function App() {
           {phase === 'betting' && (
             <div className="flex flex-col items-center gap-4">
               <div className="flex items-center gap-3">
-                <span className="text-white/40 text-sm">Mains :</span>
+                <span className="text-white/40 text-sm">Hands:</span>
                 {[1,2,3].map(n => (
                   <button key={n} onClick={() => setNumHands(n)}
                     className={`w-10 h-10 rounded-xl font-bold text-lg transition-all
@@ -834,25 +945,25 @@ export default function App() {
               {numHands > 1 && <p className="text-white/25 text-xs">{bet}€ × {numHands} = {bet * numHands}€</p>}
               <button onClick={startHand} disabled={bankroll < bet * numHands}
                 className="px-14 py-4 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 active:scale-95 text-gray-900 font-black text-xl rounded-2xl shadow-xl transition-all">
-                Distribuer
+                Deal
               </button>
             </div>
           )}
 
           {phase === 'revealing' && (
-            <p className="text-white/30 text-sm animate-pulse">Dealer joue…</p>
+            <p className="text-white/30 text-sm animate-pulse">Dealer playing…</p>
           )}
 
           {phase === 'result' && (
             <button onClick={() => { setPhase('betting'); setHandResults([]); setPendingResult(null) }}
               className="px-14 py-4 bg-yellow-500 hover:bg-yellow-400 active:scale-95 text-gray-900 font-black text-xl rounded-2xl shadow-xl transition-all">
-              Main suivante →
+              Next hand →
             </button>
           )}
 
           <p className="text-white/20 text-xs">
-            {shoe.length - shoeIdx} cartes · {decksLeft.toFixed(1)} decks restants
-            {shoeIdx >= Math.floor(shoe.length * PENETRATION * 0.9) && ' · Mélange prochain 🔀'}
+            {shoe.length - shoeIdx} cards · {decksLeft.toFixed(1)} decks remaining
+            {shoeIdx >= Math.floor(shoe.length * PENETRATION * 0.9) && ' · Shuffle soon 🔀'}
           </p>
         </div>
       </div>
