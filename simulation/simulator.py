@@ -21,7 +21,7 @@ from simulation.engine import (
     split_hand, dealer_must_hit, compute_hand_result,
 )
 from simulation.strategy import get_basic_strategy, HARD_STRATEGY, _normalize_upcard
-from simulation.deviations import get_deviation
+from simulation.deviations import get_deviation, should_take_insurance
 
 
 # ---------------------------------------------------------------------------
@@ -91,12 +91,21 @@ def _pick_action(
     true_count: float,
     use_deviations: bool,
 ) -> str:
-    """Return strategy action: deviation if applicable, else basic strategy."""
+    """Return strategy action: deviation if applicable, else basic strategy.
+
+    Les déviations I18 "Stand" (ex. 16 vs 10 à TC≥0) ont été calibrées pour les
+    jeux SANS surrender (comparaison Stand vs Hit). Dans un jeu avec surrender, SUR
+    bat Stand jusqu'à TC≈+5. On ne remplace donc jamais SUR par S via I18.
+    """
+    basic = get_basic_strategy(hand, dealer_upcard)
     if use_deviations:
         dev = get_deviation(hand, dealer_upcard, true_count)
         if dev is not None:
+            # Ne pas remplacer SUR par Stand : I18 calibré pour no-surrender
+            if basic == "SUR" and dev == "S":
+                return basic
             return dev
-    return get_basic_strategy(hand, dealer_upcard)
+    return basic
 
 
 def _play_hand(
@@ -211,6 +220,17 @@ def simulate(config: SimConfig) -> SimulationResult:
 
         dealer_upcard = dealer_hand.cards[0]  # d1 = upcard visible
 
+        # ── Assurance (I18 : TC >= +3 quand dealer montre un As) ────────────
+        insurance_profit = 0.0
+        if config.use_deviations and should_take_insurance(dealer_upcard, tc):
+            ins_bet = bet * 0.5
+            total_wagered += ins_bet
+            # Le résultat de l'assurance dépend de la hole card (d2)
+            # On l'évalue après la donne mais le profit est comptabilisé plus bas
+            # avec le reste de la main (insurance_profit sera ±ins_bet)
+            dealer_bj_for_ins = (dealer_hand.is_blackjack)
+            insurance_profit = ins_bet if dealer_bj_for_ins else -ins_bet
+
         # ── Blackjack joueur ────────────────────────────────────────────────
         if player_hand.is_blackjack:
             counter.update(d2)   # hole card révélée
@@ -221,6 +241,7 @@ def simulate(config: SimConfig) -> SimulationResult:
                 profit = bet * config.rules.blackjack_payout
                 blackjacks += 1
                 wins += 1
+            profit       += insurance_profit
             bankroll     += profit
             total_profit += profit
             total_wagered += bet
@@ -235,7 +256,7 @@ def simulate(config: SimConfig) -> SimulationResult:
         # ── Blackjack dealer ────────────────────────────────────────────────
         if dealer_hand.is_blackjack:
             counter.update(d2)   # hole card révélée
-            profit = -bet
+            profit = -bet + insurance_profit   # assurance compense partiellement
             losses += 1
             bankroll     += profit
             total_profit += profit
@@ -264,7 +285,7 @@ def simulate(config: SimConfig) -> SimulationResult:
             and len(hand_results[0][0].cards) == 2
         )
         if is_surrender:
-            profit = -(bet * 0.5)
+            profit = -(bet * 0.5) + insurance_profit
             surrenders += 1
             losses += 1
             bankroll     += profit
@@ -285,7 +306,7 @@ def simulate(config: SimConfig) -> SimulationResult:
             dealer_hand.add_card(card)
 
         # ── Résultats ───────────────────────────────────────────────────────
-        hand_profit  = 0.0
+        hand_profit  = insurance_profit   # résultat assurance inclus
         hand_wagered = 0.0
 
         for h, final_bet in hand_results:
