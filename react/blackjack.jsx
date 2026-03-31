@@ -1471,15 +1471,16 @@ export default function App() {
 
             {/* Best Play panel */}
             <CoveredPanel hidden={!showHint} onToggle={() => setShowHint(v => !v)} label="Hint" icon="💡">
-              <div style={{ background:'rgba(0,0,0,0.3)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px', padding:'10px 12px', minHeight:'74px' }}>
-                <div style={{ color:'rgba(255,255,255,0.35)', fontSize:'9px', fontWeight:700, letterSpacing:'2px', textTransform:'uppercase', marginBottom:'6px' }}>Best Play</div>
+              <div style={{ background:'rgba(0,0,0,0.3)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px', padding:'10px 12px', height:'78px', boxSizing:'border-box', display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
+                <div style={{ color:'rgba(255,255,255,0.35)', fontSize:'9px', fontWeight:700, letterSpacing:'2px', textTransform:'uppercase' }}>Best Play</div>
+                <div style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center' }}>
                 {phase === 'insurance' && insuranceHint
                   ? (
                     <div>
-                      <div style={{ fontSize:'18px', fontWeight:900, color: insuranceHint === 'take' ? '#fde047' : 'rgba(255,255,255,0.7)' }}>
+                      <div style={{ fontSize:'18px', fontWeight:900, color: insuranceHint === 'take' ? '#fde047' : 'rgba(255,255,255,0.7)', lineHeight:1 }}>
                         {insuranceHint === 'take' ? 'Take Ins.' : 'No Ins.'}
                       </div>
-                      <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.4)', marginTop:'2px' }}>
+                      <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.4)', marginTop:'3px' }}>
                         {insuranceHint === 'take' ? `TC${tc >= 0 ? '+' : ''}${tc.toFixed(1)} ≥ +3` : `TC${tc >= 0 ? '+' : ''}${tc.toFixed(1)} < +3`}
                       </div>
                     </div>
@@ -1498,10 +1499,9 @@ export default function App() {
                       </div>
                     )
                   })()
-                  : phase === 'playing'
-                  ? <div style={{ color:'rgba(255,255,255,0.15)', fontSize:'18px', fontWeight:900, lineHeight:1 }}>…</div>
                   : <div style={{ color:'rgba(255,255,255,0.15)', fontSize:'18px', fontWeight:900, lineHeight:1 }}>—</div>
                 }
+                </div>
               </div>
             </CoveredPanel>
 
