@@ -123,6 +123,15 @@ if page == "📊 Monte Carlo Simulator":
         )
         use_deviations_sim = _strategy_mode.startswith("Advanced")
         st.markdown("")
+        run_variance = st.checkbox(
+            "Run variance analysis (5 seeds)",
+            value=False,
+            help=(
+                "Runs the simulation 5 times with different random seeds "
+                "to visualize long-run variance. Takes ~5× longer."
+            ),
+        )
+        st.markdown("")
         run_btn_sim = st.button(
             "▶ Run Simulation", type="primary", use_container_width=True
         )
@@ -146,9 +155,12 @@ if page == "📊 Monte Carlo Simulator":
                     max_split_hands     = max_split,
                     blackjack_payout    = bj_payout_v,
                 ),
-                initial_bankroll = float(bankroll),
-                seed             = int(seed) if seed is not None else None,
-                use_deviations   = use_deviations_sim,
+                initial_bankroll     = float(bankroll),
+                seed                 = int(seed) if seed is not None else None,
+                use_deviations       = use_deviations_sim,
+                track_history        = True,
+                history_interval     = max(1, int(hands) // 2000),
+                track_hand_outcomes  = True,
             )
         except ValueError as e:
             st.error(f"Configuration error: {e}")
@@ -161,79 +173,231 @@ if page == "📊 Monte Carlo Simulator":
 
         st.success(f"✅ Done in {elapsed:.1f}s — {r.hands_played:,} rounds played.")
 
-        # KPI row 1 : EV
-        st.subheader("Expected Value")
+        # ── Section 1 : Key Metrics ────────────────────────────────────────
+        st.subheader("📋 Key Metrics")
         c1,c2,c3,c4,c5 = st.columns(5)
         c1.metric("EV %",           f"{r.ev_percent:+.4f}%")
         c2.metric("EV / hand",      f"{r.ev_per_hand:+.4f} €")
         c3.metric("EV / 100 hands", f"{r.ev_per_100_hands:+.2f} €")
         c4.metric("Total profit",   f"{r.total_profit:+,.0f} €")
         c5.metric("Total wagered",  f"{r.total_wagered:,.0f} €")
-
-        # KPI row 2 : bankroll
-        st.subheader("Bankroll")
-        b1,b2,b3,b4 = st.columns(4)
+        b1,b2,b3,b4,b5 = st.columns(5)
         b1.metric("Final bankroll", f"{r.final_bankroll:,.0f} €",
                   delta=f"{r.final_bankroll-bankroll:+,.0f} €")
         b2.metric("Peak bankroll",  f"{r.max_bankroll:,.0f} €")
         b3.metric("Low bankroll",   f"{r.min_bankroll:,.0f} €")
         b4.metric("Average bet",    f"{r.average_bet:.2f} €")
+        b5.metric("Std dev / hand", f"{r.profit_std:.3f} €",
+                  delta=f"+TC ratio: {r.positive_tc_ratio:.1%}")
 
-        # Hand breakdown
-        st.subheader("Hand Breakdown")
-        st.dataframe(pd.DataFrame({
-            "Outcome":     ["Wins","Losses","Pushes","Blackjacks","Surrenders","Player busts"],
-            "Count":       [r.wins, r.losses, r.pushes, r.blackjacks, r.surrenders, r.busts],
-            "% of rounds": [f"{v/r.hands_played:.2%}" for v in
-                            [r.wins, r.losses, r.pushes, r.blackjacks, r.surrenders, r.busts]],
-        }), use_container_width=True, hide_index=True)
+        # ── Helpers graphes thème sombre ──────────────────────────────────
+        BG, GRID, TEXT = '#1a1a2e', '#2a2a3e', '#e0e0e0'
 
-        # Counting & dispersion
-        st.subheader("Counting & Dispersion")
-        s1,s2,s3 = st.columns(3)
-        s1.metric("Positive-TC rounds",       f"{r.positive_tc_hands:,}",
-                  delta=f"{r.positive_tc_ratio:.1%} of rounds")
-        s2.metric("Profit std dev / hand",    f"{r.profit_std:.4f} €")
-        s3.metric("Profit std dev / hand (u)",f"{r.profit_std_units:.4f} u")
+        def _dark_fig(w=10, h=4):
+            fig, ax = plt.subplots(figsize=(w, h))
+            fig.patch.set_facecolor(BG)
+            ax.set_facecolor(BG)
+            for sp in ax.spines.values(): sp.set_color(GRID)
+            ax.tick_params(colors=TEXT, labelsize=9)
+            ax.xaxis.label.set_color(TEXT); ax.yaxis.label.set_color(TEXT)
+            ax.title.set_color(TEXT)
+            ax.grid(color=GRID, linestyle=':', linewidth=0.7)
+            return fig, ax
 
-        # Charts
-        st.subheader("Charts")
-        col_l, col_r = st.columns(2)
+        def _eur(x, _=None): return f"{x:,.0f} €"
 
-        with col_l:
-            fig, ax = plt.subplots(figsize=(5, 3.5))
-            ax.bar(["Wins","Losses","Pushes"], [r.wins, r.losses, r.pushes])
-            ax.set_title("Win / Loss / Push breakdown")
-            ax.set_ylabel("Rounds")
-            ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_: f"{x:,.0f}"))
-            ax.grid(axis="y", linestyle=":", alpha=0.5)
+        # ── Section 2 : Bankroll Progression ──────────────────────────────
+        st.subheader("📈 Bankroll Progression")
+        if r.bankroll_history:
+            xs = [h[0] for h in r.bankroll_history]
+            ys = [h[1] for h in r.bankroll_history]
+            fig, ax = _dark_fig(10, 4)
+            ax.plot(xs, ys, color='#4a9eff', linewidth=1.2, zorder=3)
+            # Zone colorée au-dessus/dessous de la bankroll initiale
+            ax.fill_between(xs, ys, bankroll,
+                            where=[y >= bankroll for y in ys],
+                            color='#22c55e', alpha=0.15, interpolate=True)
+            ax.fill_between(xs, ys, bankroll,
+                            where=[y < bankroll for y in ys],
+                            color='#ef4444', alpha=0.15, interpolate=True)
+            # Lignes horizontales
+            ax.axhline(bankroll,         color='#6b7280', linestyle='--', linewidth=1,
+                       label=f"Initial  {bankroll:,.0f} €")
+            fin_col = '#22c55e' if r.final_bankroll >= bankroll else '#ef4444'
+            ax.axhline(r.final_bankroll, color=fin_col, linestyle=':', linewidth=1,
+                       label=f"Final  {r.final_bankroll:,.0f} €")
+            # Annotations peak / low
+            peak_idx = int(np.argmax(ys)); low_idx = int(np.argmin(ys))
+            ax.scatter([xs[peak_idx]], [ys[peak_idx]], color='#22c55e', s=40, zorder=5)
+            ax.scatter([xs[low_idx]],  [ys[low_idx]],  color='#ef4444', s=40, zorder=5)
+            ax.annotate(f"Peak\n{ys[peak_idx]:,.0f} €",
+                        (xs[peak_idx], ys[peak_idx]), textcoords="offset points",
+                        xytext=(0, 10), ha='center', fontsize=8, color='#22c55e')
+            ax.annotate(f"Low\n{ys[low_idx]:,.0f} €",
+                        (xs[low_idx], ys[low_idx]), textcoords="offset points",
+                        xytext=(0, -18), ha='center', fontsize=8, color='#ef4444')
+            ax.set_title(f"Bankroll progression over {r.hands_played:,} hands", fontweight='bold', fontsize=11)
+            ax.set_xlabel("Hand #", color=TEXT)
+            ax.set_ylabel("Bankroll (€)", color=TEXT)
+            ax.yaxis.set_major_formatter(mticker.FuncFormatter(_eur))
+            ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_: f"{int(x):,}"))
+            leg = ax.legend(fontsize=8, facecolor=BG, edgecolor=GRID, labelcolor=TEXT)
+            plt.tight_layout(); st.pyplot(fig); plt.close(fig)
+        else:
+            st.info("Enable track_history to see bankroll progression.")
+
+        # ── Section 3 : True Count Analysis ───────────────────────────────
+        with st.expander("📊 True Count Analysis", expanded=True):
+            buckets = r.tc_bucket_ev
+            labels, ev_vals, counts = [], [], []
+            for k in range(-3, 6):
+                cnt = buckets[k]['count'] if k in buckets else 0
+                profit = buckets[k]['profit'] if k in buckets else 0.0
+                lbl = f"TC {'+' if k > 0 else ''}{k}" if k < 5 else "TC +5+"
+                labels.append(lbl)
+                ev_vals.append((profit / cnt) if cnt > 0 else 0.0)
+                counts.append(cnt)
+            colors = ['#ef4444' if v < 0 else '#22c55e' for v in ev_vals]
+            fig, ax = _dark_fig(9, 4)
+            bars = ax.barh(labels, ev_vals, color=colors, edgecolor='none', height=0.55)
+            ax.axvline(0, color=TEXT, linewidth=0.8)
+            # Labels count à droite
+            x_max = max(abs(v) for v in ev_vals) if ev_vals else 1
+            for i, (bar, cnt) in enumerate(zip(bars, counts)):
+                xpos = bar.get_width()
+                ha = 'left' if xpos >= 0 else 'right'
+                offset = x_max * 0.03 if xpos >= 0 else -x_max * 0.03
+                ax.text(xpos + offset, bar.get_y() + bar.get_height()/2,
+                        f"{cnt:,} hands", va='center', ha=ha, fontsize=7.5, color=TEXT, alpha=0.7)
+            ax.set_title("EV per hand by True Count bucket", fontweight='bold', fontsize=11)
+            ax.set_xlabel("Average profit per hand (€)", color=TEXT)
+            ax.xaxis.set_major_formatter(mticker.FuncFormatter(_eur))
             plt.tight_layout(); st.pyplot(fig); plt.close(fig)
 
-        with col_r:
-            fig, ax = plt.subplots(figsize=(5, 3.5))
-            ax.bar(
-                ["EV %","Win %","Loss %","Push %","+TC %"],
-                [r.ev_percent,
-                 r.wins/r.hands_played*100, r.losses/r.hands_played*100,
-                 r.pushes/r.hands_played*100, r.positive_tc_ratio*100],
-            )
-            ax.axhline(0, linewidth=0.8)
-            ax.set_title("Key metrics (%)")
-            ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f%%"))
-            ax.grid(axis="y", linestyle=":", alpha=0.5)
+        # ── Section 4 : Hand Distribution ─────────────────────────────────
+        with st.expander("📉 Hand Outcome Distribution", expanded=False):
+            if r.hand_outcomes:
+                outcomes = np.array(r.hand_outcomes, dtype=np.float32)
+                ev_mean = float(np.mean(outcomes))
+                fig, ax = _dark_fig(10, 4)
+                # Histogramme avec couleurs séparées perte/gain
+                max_abs = float(np.percentile(np.abs(outcomes), 99.5))
+                bins = np.linspace(-max_abs, max_abs, 80)
+                neg_mask = outcomes < 0; pos_mask = outcomes > 0; zero_mask = outcomes == 0
+                ax.hist(outcomes[neg_mask], bins=bins, color='#ef4444', alpha=0.75,
+                        label='Loss', edgecolor='none')
+                ax.hist(outcomes[pos_mask], bins=bins, color='#22c55e', alpha=0.75,
+                        label='Win', edgecolor='none')
+                ax.hist(outcomes[zero_mask], bins=3, color='#6b7280', alpha=0.6,
+                        label='Push', edgecolor='none')
+                ax.axvline(ev_mean, color='#f0c040', linewidth=1.5, linestyle='--',
+                           label=f"EV mean: {ev_mean:+.3f} €")
+                ax.set_title("Distribution of hand outcomes", fontweight='bold', fontsize=11)
+                ax.set_xlabel("Net profit per hand (€)", color=TEXT)
+                ax.set_ylabel("Frequency", color=TEXT)
+                ax.xaxis.set_major_formatter(mticker.FuncFormatter(_eur))
+                ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_: f"{int(x):,}"))
+                leg = ax.legend(fontsize=8, facecolor=BG, edgecolor=GRID, labelcolor=TEXT)
+                plt.tight_layout(); st.pyplot(fig); plt.close(fig)
+            else:
+                st.info("Hand outcomes not tracked.")
+
+        # ── Section 5 : Variance Analysis (multi-seed) ────────────────────
+        if run_variance:
+            st.subheader("🎲 Variance Analysis — 5 Simulations")
+            SEEDS_VAR = [42, 123, 456, 789, 1337]
+            COLORS_VAR = ['#4a9eff','#f0c040','#a78bfa','#34d399','#fb923c']
+            variance_results = []
+            prog_bar  = st.progress(0)
+            prog_text = st.empty()
+            for i, s in enumerate(SEEDS_VAR):
+                prog_text.text(f"Running simulation {i+1}/5 (seed {s})…")
+                vcfg = SimConfig(
+                    hands            = int(hands),
+                    decks            = decks,
+                    penetration      = penetration,
+                    betting          = BettingConfig.from_string(spread, unit_size=float(unit_size)),
+                    rules            = TableRules(
+                        dealer_hits_soft_17 = dealer_h17,
+                        double_after_split  = das_sim,
+                        surrender_allowed   = surrender_sim,
+                        max_split_hands     = max_split,
+                        blackjack_payout    = bj_payout_v,
+                    ),
+                    initial_bankroll = float(bankroll),
+                    seed             = s,
+                    use_deviations   = use_deviations_sim,
+                    track_history    = True,
+                    history_interval = max(1, int(hands) // 2000),
+                )
+                vr = simulate(vcfg)
+                variance_results.append(vr)
+                prog_bar.progress((i + 1) / 5)
+            prog_text.empty(); prog_bar.empty()
+
+            fig, ax = _dark_fig(10, 5)
+            all_ys = []
+            for i, (vr, s) in enumerate(zip(variance_results, SEEDS_VAR)):
+                if vr.bankroll_history:
+                    vxs = [h[0] for h in vr.bankroll_history]
+                    vys = [h[1] for h in vr.bankroll_history]
+                    ax.plot(vxs, vys, color=COLORS_VAR[i], linewidth=1,
+                            label=f"Seed {s}  ({vr.final_bankroll:+,.0f} €)", alpha=0.85)
+                    all_ys.append(vys)
+            ax.axhline(bankroll, color='#6b7280', linestyle='--', linewidth=1,
+                       label=f"Initial  {bankroll:,.0f} €")
+            # Zone de confiance min/max
+            if all_ys:
+                min_len = min(len(y) for y in all_ys)
+                arr = np.array([y[:min_len] for y in all_ys])
+                xs_var = [vr.bankroll_history[j][0] for j in range(min_len)] \
+                         if variance_results[0].bankroll_history else list(range(min_len))
+                ax.fill_between(xs_var, arr.min(axis=0), arr.max(axis=0),
+                                color='#ffffff', alpha=0.07, label="Min–Max range")
+            ax.set_title(
+                f"Bankroll variance across 5 simulations — {int(hands):,} hands each",
+                fontweight='bold', fontsize=11)
+            ax.set_xlabel("Hand #", color=TEXT)
+            ax.set_ylabel("Bankroll (€)", color=TEXT)
+            ax.yaxis.set_major_formatter(mticker.FuncFormatter(_eur))
+            ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_: f"{int(x):,}"))
+            leg = ax.legend(fontsize=8, facecolor=BG, edgecolor=GRID, labelcolor=TEXT, ncol=2)
             plt.tight_layout(); st.pyplot(fig); plt.close(fig)
 
-        fig, ax = plt.subplots(figsize=(10, 2.5))
-        ax.barh(["Bankroll range"],
-                [r.max_bankroll - r.min_bankroll], left=[r.min_bankroll], height=0.4)
-        ax.axvline(bankroll,         linestyle="--", linewidth=1, label=f"Initial {bankroll:,.0f} €")
-        ax.axvline(r.final_bankroll, linestyle=":",  linewidth=1, label=f"Final {r.final_bankroll:,.0f} €")
-        ax.set_title("Bankroll range (min → max)")
-        ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_: f"{x:,.0f} €"))
-        ax.legend(loc="lower right")
-        plt.tight_layout(); st.pyplot(fig); plt.close(fig)
+            # Mini-tableau de synthèse
+            var_rows = []
+            for vr, s in zip(variance_results, SEEDS_VAR):
+                var_rows.append({
+                    "Seed": s,
+                    "Final bankroll": f"{vr.final_bankroll:,.0f} €",
+                    "Peak":           f"{vr.max_bankroll:,.0f} €",
+                    "Low":            f"{vr.min_bankroll:,.0f} €",
+                    "Net P&L":        f"{vr.total_profit:+,.0f} €",
+                })
+            avg_final = np.mean([vr.final_bankroll for vr in variance_results])
+            avg_peak  = np.mean([vr.max_bankroll   for vr in variance_results])
+            avg_low   = np.mean([vr.min_bankroll   for vr in variance_results])
+            avg_pnl   = np.mean([vr.total_profit   for vr in variance_results])
+            var_rows.append({
+                "Seed": "**Average**",
+                "Final bankroll": f"**{avg_final:,.0f} €**",
+                "Peak":           f"**{avg_peak:,.0f} €**",
+                "Low":            f"**{avg_low:,.0f} €**",
+                "Net P&L":        f"**{avg_pnl:+,.0f} €**",
+            })
+            st.dataframe(pd.DataFrame(var_rows), use_container_width=True, hide_index=True)
 
-        with st.expander("Simulation config recap"):
+        # ── Section 6 : Hand Breakdown ─────────────────────────────────────
+        with st.expander("🃏 Hand Breakdown", expanded=False):
+            st.dataframe(pd.DataFrame({
+                "Outcome":     ["Wins","Losses","Pushes","Blackjacks","Surrenders","Player busts"],
+                "Count":       [r.wins, r.losses, r.pushes, r.blackjacks, r.surrenders, r.busts],
+                "% of rounds": [f"{v/r.hands_played:.2%}" for v in
+                                [r.wins, r.losses, r.pushes, r.blackjacks, r.surrenders, r.busts]],
+            }), use_container_width=True, hide_index=True)
+
+        # ── Section 7 : Config Recap ───────────────────────────────────────
+        with st.expander("⚙ Simulation config recap", expanded=False):
             st.code(
                 f"Hands:     {r.hands_played:,}\n"
                 f"Decks:     {decks}  |  Penetration: {penetration:.0%}\n"

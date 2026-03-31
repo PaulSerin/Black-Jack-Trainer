@@ -90,9 +90,10 @@ class SimConfig:
     rules:            TableRules    = field(default_factory=TableRules)
     initial_bankroll: float         = 10_000.0
     seed:             Optional[int] = None
-    use_deviations:   bool          = False   # True = Illustrious 18 on top of basic strategy
-    track_history:    bool          = False   # True = record bankroll snapshots every N rounds
-    history_interval: int           = 500     # sample bankroll every N rounds (if track_history)
+    use_deviations:      bool          = False   # True = Illustrious 18 on top of basic strategy
+    track_history:       bool          = False   # True = record bankroll snapshots every N rounds
+    history_interval:    int           = 500     # sample bankroll every N rounds (if track_history)
+    track_hand_outcomes: bool          = False   # True = collect per-hand profit for distribution chart
 
     def __post_init__(self) -> None:
         if self.hands < 1:
@@ -146,6 +147,13 @@ class SimulationResult:
 
     # ── Historique bankroll (optionnel) ───────────────────────────────────
     bankroll_history:  list    = field(default_factory=list)  # [(round_index, bankroll), ...]
+
+    # ── Analyse par tranche de TC (toujours rempli) ───────────────────────
+    # { tc_key: {'profit': float, 'count': int} }  avec tc_key ∈ [-3, 5]  (5 = ≥+5)
+    tc_bucket_ev:      dict    = field(default_factory=dict)
+
+    # ── Distribution des profits par main (optionnel) ─────────────────────
+    hand_outcomes:     list    = field(default_factory=list)  # [profit_par_main, ...]
 
     def summary(self) -> str:
         """Résumé lisible en une page."""

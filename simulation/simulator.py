@@ -194,6 +194,12 @@ def simulate(config: SimConfig) -> SimulationResult:
     bankroll_history = []   # [(round_index, bankroll)] snapshots
     history_interval = config.history_interval if config.track_history else 0
 
+    # TC buckets : clé ∈ [-3 .. 5], 5 représente ≥+5
+    tc_buckets: dict = {k: {'profit': 0.0, 'count': 0} for k in range(-3, 6)}
+
+    # Distribution des profits par main (uniquement si demandé)
+    hand_outcomes: list = [] if config.track_hand_outcomes else None  # type: ignore
+
     for _ in range(config.hands):
         if shoe.needs_shuffle:
             shoe.shuffle()
@@ -251,6 +257,9 @@ def simulate(config: SimConfig) -> SimulationResult:
             min_bankroll = min(min_bankroll, bankroll)
             if history_interval and rounds_played % history_interval == 0:
                 bankroll_history.append((rounds_played, bankroll))
+            _k = max(-3, min(5, int(math.floor(tc))))
+            tc_buckets[_k]['profit'] += profit; tc_buckets[_k]['count'] += 1
+            if hand_outcomes is not None: hand_outcomes.append(profit)
             continue
 
         # ── Blackjack dealer ────────────────────────────────────────────────
@@ -267,6 +276,9 @@ def simulate(config: SimConfig) -> SimulationResult:
             min_bankroll = min(min_bankroll, bankroll)
             if history_interval and rounds_played % history_interval == 0:
                 bankroll_history.append((rounds_played, bankroll))
+            _k = max(-3, min(5, int(math.floor(tc))))
+            tc_buckets[_k]['profit'] += profit; tc_buckets[_k]['count'] += 1
+            if hand_outcomes is not None: hand_outcomes.append(profit)
             continue
 
         # ── Le joueur joue (hole card encore inconnue) ──────────────────────
@@ -297,6 +309,9 @@ def simulate(config: SimConfig) -> SimulationResult:
             min_bankroll = min(min_bankroll, bankroll)
             if history_interval and rounds_played % history_interval == 0:
                 bankroll_history.append((rounds_played, bankroll))
+            _k = max(-3, min(5, int(math.floor(tc))))
+            tc_buckets[_k]['profit'] += profit; tc_buckets[_k]['count'] += 1
+            if hand_outcomes is not None: hand_outcomes.append(profit)
             continue
 
         # ── Le dealer joue ──────────────────────────────────────────────────
@@ -342,6 +357,9 @@ def simulate(config: SimConfig) -> SimulationResult:
         min_bankroll = min(min_bankroll, bankroll)
         if history_interval and rounds_played % history_interval == 0:
             bankroll_history.append((rounds_played, bankroll))
+        _k = max(-3, min(5, int(math.floor(tc))))
+        tc_buckets[_k]['profit'] += hand_profit; tc_buckets[_k]['count'] += 1
+        if hand_outcomes is not None: hand_outcomes.append(hand_profit)
 
     # ── Métriques finales ────────────────────────────────────────────────────
     profit_std       = math.sqrt(welf_M2 / welf_n) if welf_n > 1 else 0.0
@@ -376,6 +394,8 @@ def simulate(config: SimConfig) -> SimulationResult:
         profit_std        = profit_std,
         profit_std_units  = profit_std_units,
         bankroll_history  = bankroll_history,
+        tc_bucket_ev      = tc_buckets,
+        hand_outcomes     = hand_outcomes if hand_outcomes is not None else [],
     )
 
 
