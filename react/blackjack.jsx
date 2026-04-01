@@ -1,7 +1,10 @@
-// blackjack.jsx — Blackjack Trainer Pro
+// blackjack.jsx - Blackjack Trainer Pro
 import { useState, useMemo, useEffect, useRef } from 'react'
 import basicStrategyImg from '../docs/references/basic-blackjack-strategy-chart.png'
 import i18Img          from '../docs/references/Illustrious_18_Deviations.png'
+
+// URL du simulateur Streamlit - configurable via react/.env (VITE_SIMULATOR_URL)
+const SIMULATOR_URL = import.meta.env.VITE_SIMULATOR_URL || 'http://localhost:8501'
 
 // ── Constants ─────────────────────────────────────────────────
 const NUM_DECKS   = 6
@@ -611,7 +614,7 @@ export default function App() {
   const [bankroll, setBankroll] = useState(INIT_BANK)
   const [bets,     setBets]     = useState([])
 
-  // ─ Per-hand bet chips — spots dynamiques (1 à 6) ─────────
+  // ─ Per-hand bet chips - spots dynamiques (1 à 6) ─────────
   const [handBetChips,     setHandBetChips]     = useState([[]])
   const [lastHandBetChips, setLastHandBetChips] = useState([[]])
   const [selectedBetHand,  setSelectedBetHand]  = useState(0)
@@ -702,7 +705,7 @@ export default function App() {
     if (!h) return null
     // Si Surrender recommandé mais non disponible → fallback Hit (BS sans surrender)
     if (h.action === 'SUR' && !canSur) {
-      return { ...h, action: 'H', surFallback: true }
+      return { ...h, action: 'H' }
     }
     // Si Double recommandé mais main > 2 cartes → fallback D→H, Ds→S
     if ((h.action === 'D' || h.action === 'Ds') && !canDouble(activeHand)) {
@@ -743,12 +746,11 @@ export default function App() {
           setResultMsg(pendingResult.msg)
           setDelta(pendingResult.displayDelta)
           setHandResults(pendingResult.results)
-          // Session stats — compté par main individuelle
+          // Session stats - compté par main individuelle
           const handWins = pendingResult.results.filter(r => r === 'win' || r === 'bj').length
           setSessionHands(n => n + pendingResult.results.length)
           setSessionWins(n => n + handWins)
           setSessionDelta(n => n + pendingResult.displayDelta)
-          console.log('[P&L] round delta:', pendingResult.displayDelta, '| results:', pendingResult.results)
           setShowRoundDelta(true)
         }
         setPhase('result')
@@ -819,7 +821,7 @@ export default function App() {
           displayDelta += gain
           msgs.push(hands.length > 1 ? `H${hi+1}: BJ +${gain}€` : `Blackjack! +${gain}€`)
         } else if (preRes[hi] === 'push') {
-          msgs.push(hands.length > 1 ? `H${hi+1}: Push BJ` : 'Push — Both BJ')
+          msgs.push(hands.length > 1 ? `H${hi+1}: Push BJ` : 'Push - Both BJ')
         } else {
           displayDelta -= b
           msgs.push(hands.length > 1 ? `H${hi+1}: Dealer BJ` : 'Dealer Blackjack')
@@ -846,7 +848,7 @@ export default function App() {
         msgs.push(hands.length > 1 ? `H${hi+1}: Dealer BJ` : 'Dealer Blackjack')
       } else if (pBJ && dBJ) {
         bankrollReturn += b; results.push('push')
-        msgs.push('Push — Both BJ')
+        msgs.push('Push - Both BJ')
       } else if (dTotal > 21 || pTotal > dTotal) {
         bankrollReturn += b * 2; displayDelta += b
         results.push('win')
@@ -1028,7 +1030,7 @@ export default function App() {
         const b = handBetsFinal[hi]
         if (pBJs[hi]) {
           bankrollReturn += b; results.push('push'); preRes[hi] = 'push'
-          msgs.push(actualNumHands > 1 ? `H${hi+1}: Push BJ` : 'Push — Both Blackjack!')
+          msgs.push(actualNumHands > 1 ? `H${hi+1}: Push BJ` : 'Push - Both Blackjack!')
         } else {
           displayDelta -= b; results.push('lose'); preRes[hi] = 'lose'
           msgs.push(actualNumHands > 1 ? `H${hi+1}: Dealer BJ` : 'Dealer Blackjack')
@@ -1075,7 +1077,7 @@ export default function App() {
 
   // ─ Insurance resolution (par main) ───────────────────────
   function resolveAfterInsurance(decisions) {
-    // decisions[hi] = { taken: bool, insBet: number } — insBet déjà déduit du bankroll
+    // decisions[hi] = { taken: bool, insBet: number } - insBet déjà déduit du bankroll
     const dBJ  = isBlackjack(dealerCards)
     const pBJs = playerHands.map(h => isBlackjack(h))
 
@@ -1107,7 +1109,7 @@ export default function App() {
         const b = bets[hi]
         if (pBJs[hi]) {
           bankrollReturn += b; results.push('push')
-          msgs.push(playerHands.length > 1 ? `H${hi+1}: Push BJ` : 'Push — Both BJ')
+          msgs.push(playerHands.length > 1 ? `H${hi+1}: Push BJ` : 'Push - Both BJ')
         } else {
           displayDelta -= b; results.push('lose')
           msgs.push(playerHands.length > 1 ? `H${hi+1}: Dealer BJ` : 'Dealer Blackjack')
@@ -1434,30 +1436,6 @@ export default function App() {
       <div style={{ minHeight:'100vh', background:'#0a1a0a', display:'flex', flexDirection:'column',
         userSelect:'none', fontFamily:"'Rajdhani',sans-serif", color:'#f0ece0', position:'relative', zIndex:1 }}>
 
-        {/* ── Title bar ── */}
-        <div style={{ padding:'10px 16px', display:'flex', alignItems:'center', gap:'12px',
-          borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
-          <div style={{ fontWeight:700, fontSize:'18px', letterSpacing:'-0.3px' }}>Blackjack Trainer Pro</div>
-          <div style={{ color:'rgba(255,255,255,0.25)', fontSize:'11px' }}>
-            {gameConfig.numDecks} decks · {gameConfig.dealerHitsSoft17 ? 'H17' : 'S17'} · {gameConfig.bjPayout === 1.5 ? '3:2' : '6:5'} · {gameConfig.lateSurrender ? 'LS' : 'No LS'} · Hi-Lo
-          </div>
-          <div style={{ flex:1 }} />
-          {/* Gear icon */}
-          <button
-            onClick={() => { setEditConfig({...gameConfig}); setShowSettings(true) }}
-            style={{ background:'none', border:'none', cursor:'pointer', padding:'4px',
-              display:'flex', alignItems:'center', justifyContent:'center' }}
-            title="Game Rules & Settings">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-              style={{ transition:'transform 0.3s, opacity 0.2s' }}
-              onMouseEnter={e => { e.currentTarget.style.transform='rotate(30deg)'; e.currentTarget.style.opacity='1' }}
-              onMouseLeave={e => { e.currentTarget.style.transform='rotate(0deg)'; e.currentTarget.style.opacity='0.6' }}>
-              <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="#c8963c" strokeWidth="1.8" strokeOpacity="0.6"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="#c8963c" strokeWidth="1.8" strokeOpacity="0.6"/>
-            </svg>
-          </button>
-        </div>
-
         {/* ── 3-column layout ── */}
         <div style={{ flex:1, display:'flex', gap:'10px', padding:'10px', minHeight:0 }}>
 
@@ -1467,6 +1445,10 @@ export default function App() {
             {/* Hi-Lo HUD */}
             <CoveredPanel hidden={!showHiLo} onToggle={() => setShowHiLo(v => !v)} label="Hi-Lo" icon="🎴">
               <Counter rc={rc} tc={tc} />
+              {/* Config résumé discret sous le counter */}
+              <div style={{ textAlign:'center', fontSize:'10px', color:'#4a7a5a', marginTop:'4px', letterSpacing:'0.5px' }}>
+                {gameConfig.numDecks}D · {gameConfig.dealerHitsSoft17 ? 'H17' : 'S17'} · {gameConfig.bjPayout === 1.5 ? '3:2' : '6:5'} · {gameConfig.lateSurrender ? 'LS' : 'No LS'}
+              </div>
             </CoveredPanel>
 
             {/* Best Play panel */}
@@ -1499,7 +1481,7 @@ export default function App() {
                       </div>
                     )
                   })()
-                  : <div style={{ color:'rgba(255,255,255,0.15)', fontSize:'18px', fontWeight:900, lineHeight:1 }}>—</div>
+                  : <div style={{ color:'rgba(255,255,255,0.15)', fontSize:'18px', fontWeight:900, lineHeight:1 }}>-</div>
                 }
                 </div>
               </div>
@@ -1612,6 +1594,33 @@ export default function App() {
               </div>
             </div>
 
+            {/* Bouton Simulator */}
+            <a href={SIMULATOR_URL} target="_blank" rel="noreferrer"
+              style={{
+                display:'block', width:'100%', padding:'9px 0', textAlign:'center',
+                background:'rgba(200,150,60,0.08)', border:'1px solid rgba(200,150,60,0.3)',
+                borderRadius:'8px', cursor:'pointer', textDecoration:'none',
+                transition:'background 150ms, border-color 150ms',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(200,150,60,0.18)'
+                e.currentTarget.style.borderColor = 'rgba(200,150,60,0.8)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(200,150,60,0.08)'
+                e.currentTarget.style.borderColor = 'rgba(200,150,60,0.3)'
+              }}
+            >
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                  <rect x="1" y="10" width="3" height="5" rx="1" fill="#c8963c"/>
+                  <rect x="6" y="6"  width="3" height="9" rx="1" fill="#c8963c" opacity="0.8"/>
+                  <rect x="11" y="2" width="3" height="13" rx="1" fill="#c8963c" opacity="0.6"/>
+                </svg>
+                <span style={{ color:'#c8963c', fontSize:'10px', fontWeight:700, letterSpacing:'2px', textTransform:'uppercase' }}>Simulator</span>
+              </div>
+            </a>
+
           </div>
 
           {/* ══ CASINO TABLE ══ */}
@@ -1678,9 +1687,9 @@ export default function App() {
               {/* Dealer zone */}
               <div style={{ paddingTop:'16px', paddingBottom:'16px', display:'flex', flexDirection:'row',
                 alignItems:'center', justifyContent:'center', gap:'20px', minHeight:'195px' }}>
-                {/* Discard pile — left */}
+                {/* Discard pile - left */}
                 <DiscardPile count={discardCount} />
-                {/* Dealer hand — centre */}
+                {/* Dealer hand - centre */}
                 <div style={{ flex:1, display:'flex', justifyContent:'center', alignItems:'center', minWidth:0 }}>
                   {dealerCards.length > 0
                     ? <HandDisplay key={`dealer-${dealRoundKey}`}
@@ -1692,10 +1701,10 @@ export default function App() {
                     : <span style={{ color:'rgba(255,255,255,0.12)', fontSize:'13px' }}>Dealer</span>
                   }
                 </div>
-                {/* Shoe — right */}
+                {/* Shoe - right */}
                 <ShoeVisual cardsLeft={shoe.length - shoeIdx} totalCards={shoe.length} />
               </div>
-              {/* Séparateur dealer/joueur — courbe SVG dorée */}
+              {/* Séparateur dealer/joueur - courbe SVG dorée */}
               <svg width="100%" height="36" viewBox="0 0 400 36" preserveAspectRatio="none"
                 style={{ display:'block', overflow:'visible', margin:'2px 0', flexShrink:0 }}>
                 <defs>
@@ -1730,7 +1739,7 @@ export default function App() {
                 </svg>
               </div>
 
-              {/* Inscription BLACKJACK PAYS 3 TO 2 — sous le séparateur, jamais masquée */}
+              {/* Inscription BLACKJACK PAYS 3 TO 2 - sous le séparateur, jamais masquée */}
               <div style={{ textAlign:'center', pointerEvents:'none', margin:'2px 0 4px' }}>
                 <span style={{ color:'#c8963c', opacity:0.25, fontFamily:"Georgia,'Times New Roman',serif",
                   fontSize:'11px', letterSpacing:'6px', textTransform:'uppercase' }}>
@@ -1742,7 +1751,7 @@ export default function App() {
               <div style={{ flex:1, paddingTop:'16px', paddingBottom:'8px', display:'flex', flexDirection:'column',
                 alignItems:'center', minHeight:'160px', justifyContent:'center', position:'relative' }}>
 
-                {/* Result banner — superposé, ne déplace pas les mains */}
+                {/* Result banner - superposé, ne déplace pas les mains */}
                 {phase === 'result' && (
                   <div style={{ position:'absolute', top:'-4px', left:0, right:0, zIndex:6,
                     display:'flex', flexDirection:'column', alignItems:'center', gap:'2px',
@@ -1995,7 +2004,7 @@ export default function App() {
                         {bets.length > 1 && (
                           <span style={{ color:'rgba(255,255,255,0.45)', fontWeight:500, fontSize:'13px',
                             marginLeft:'8px' }}>
-                            — Hand {insHandIdx + 1} of {bets.length}
+                            - Hand {insHandIdx + 1} of {bets.length}
                           </span>
                         )}
                       </div>
@@ -2153,6 +2162,34 @@ export default function App() {
               </div>
             </div>
 
+            {/* Bouton Settings */}
+            <button
+              onClick={() => { setEditConfig({...gameConfig}); setShowSettings(true) }}
+              style={{
+                width:'100%', padding:'9px 0', textAlign:'center',
+                background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)',
+                borderRadius:'8px', cursor:'pointer',
+                transition:'background 150ms, border-color 150ms',
+                fontFamily:"'Rajdhani',sans-serif",
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.09)'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
+              }}
+            >
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="#c8963c" strokeWidth="1.8"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="#c8963c" strokeWidth="1.8"/>
+                </svg>
+                <span style={{ color:'rgba(255,255,255,0.55)', fontSize:'10px', fontWeight:700, letterSpacing:'2px', textTransform:'uppercase' }}>Settings</span>
+              </div>
+            </button>
+
           </div>
 
         </div>
@@ -2258,7 +2295,7 @@ export default function App() {
                   </div>
                 )}
 
-                <Row label={`Penetration — ${Math.round(cfg.penetration*100)}%`}>
+                <Row label={`Penetration - ${Math.round(cfg.penetration*100)}%`}>
                   <input type="range" min="50" max="90" step="5"
                     value={Math.round(cfg.penetration*100)}
                     onChange={e => set({penetration: parseInt(e.target.value)/100})}
@@ -2363,7 +2400,7 @@ export default function App() {
                 <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
                   <div>
                     <div style={{ color:'#f0ece0', fontWeight:800, fontSize:'16px', fontFamily:"'Rajdhani',sans-serif" }}>
-                      Illustrious 18 — Hi-Lo Deviations
+                      Illustrious 18 - Hi-Lo Deviations
                     </div>
                     <div style={{ color:'rgba(255,255,255,0.35)', fontSize:'11px', marginTop:'2px' }}>
                       Override basic strategy at True Count threshold

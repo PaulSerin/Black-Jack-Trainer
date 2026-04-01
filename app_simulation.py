@@ -1,19 +1,29 @@
 """
-app_simulation.py — Blackjack EV Lab + EV Playground
-Navigation dans la sidebar, paramètres sur la page principale.
+app_simulation.py - Blackjack EV Lab
+Deux pages accessibles depuis la sidebar :
+  • Monte Carlo Simulator - EV, variance, historique bankroll, analyse par TC
+  • EV Playground        - EV par action pour une main précise à un TC cible
 
 Lancement : streamlit run app_simulation.py
 """
 
 from __future__ import annotations
 
-import os, sys, random, time
+import os
+import sys
+import random
+import time
 from collections import Counter
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # charge .env à la racine si présent
+except ImportError:
+    pass  # python-dotenv optionnel, fallback sur les vars d'environnement système
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import matplotlib.ticker as mticker
 import streamlit as st
 
@@ -25,6 +35,36 @@ from simulation.engine import Card, Hand
 from simulation.strategy import get_basic_strategy
 from simulation.deviations import get_deviation
 
+
+# ═══════════════════════════════════════════════════════════════
+# Helpers graphes - thème sombre partagé entre les deux pages
+# ═══════════════════════════════════════════════════════════════
+
+_BG   = '#1a1a2e'   # fond figure + axes
+_GRID = '#2a2a3e'   # couleur grille et bordures
+_TEXT = '#e0e0e0'   # textes et labels
+
+
+def _dark_fig(w: float = 10, h: float = 4):
+    """Retourne (fig, ax) avec thème sombre cohérent."""
+    fig, ax = plt.subplots(figsize=(w, h))
+    fig.patch.set_facecolor(_BG)
+    ax.set_facecolor(_BG)
+    for sp in ax.spines.values():
+        sp.set_color(_GRID)
+    ax.tick_params(colors=_TEXT, labelsize=9)
+    ax.xaxis.label.set_color(_TEXT)
+    ax.yaxis.label.set_color(_TEXT)
+    ax.title.set_color(_TEXT)
+    ax.grid(color=_GRID, linestyle=':', linewidth=0.7)
+    return fig, ax
+
+
+def _eur(x, _=None) -> str:
+    """Formateur matplotlib : montant en € avec séparateur milliers."""
+    return f"{x:,.0f} €"
+
+
 # ═══════════════════════════════════════════════════════════════
 # Page config
 # ═══════════════════════════════════════════════════════════════
@@ -34,7 +74,10 @@ st.set_page_config(
     layout="wide",
 )
 
-# ── Sidebar : navigation uniquement ──────────────────────────
+# URL du jeu React - configurable via .env (STREAMLIT_GAME_URL)
+_GAME_URL = os.getenv("STREAMLIT_GAME_URL", "http://localhost:5173")
+
+# ── Sidebar : navigation + lien vers le jeu ───────────────────
 _PAGES = ["📊 Monte Carlo Simulator", "🔬 EV Playground"]
 if "page" not in st.session_state:
     st.session_state.page = _PAGES[0]
@@ -53,6 +96,43 @@ with st.sidebar:
             st.session_state.page = _p
             st.rerun()
     st.divider()
+    st.markdown(
+        """
+        <style>
+        .open-game-btn a {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+            padding: 0.25rem 0.75rem;
+            min-height: 38px;
+            box-sizing: border-box;
+            background: transparent;
+            border: 1px solid rgba(250, 250, 250, 0.2);
+            border-radius: 0.5rem;
+            color: rgb(250, 250, 250);
+            font-size: 0.875rem;
+            font-weight: 400;
+            text-decoration: none;
+            cursor: pointer;
+            transition: border-color 150ms, background 150ms;
+            font-family: "Source Sans Pro", sans-serif;
+        }
+        .open-game-btn a:hover {
+            border-color: rgba(250, 250, 250, 0.6);
+            background: rgba(250, 250, 250, 0.05);
+            color: rgb(250, 250, 250);
+            text-decoration: none;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<div class="open-game-btn"><a href="{_GAME_URL}" target="_blank">🃏 Open Game</a></div>',
+        unsafe_allow_html=True,
+    )
 
 page = st.session_state.page
 
@@ -63,7 +143,7 @@ page = st.session_state.page
 if page == "📊 Monte Carlo Simulator":
 
     st.title("📊 Monte Carlo Simulator")
-    st.caption("Long-run simulation — configurable strategy, Hi-Lo bet spread")
+    st.caption("Long-run simulation - configurable strategy, Hi-Lo bet spread")
     st.divider()
 
     # ── Parameters ───────────────────────────────────────────
@@ -171,7 +251,7 @@ if page == "📊 Monte Carlo Simulator":
             r  = simulate(cfg)
             elapsed = time.perf_counter() - t0
 
-        st.success(f"✅ Done in {elapsed:.1f}s — {r.hands_played:,} rounds played.")
+        st.success(f"✅ Done in {elapsed:.1f}s - {r.hands_played:,} rounds played.")
 
         # ── Section 1 : Key Metrics ────────────────────────────────────────
         st.subheader("📋 Key Metrics")
@@ -189,22 +269,6 @@ if page == "📊 Monte Carlo Simulator":
         b4.metric("Average bet",    f"{r.average_bet:.2f} €")
         b5.metric("Std dev / hand", f"{r.profit_std:.3f} €",
                   delta=f"+TC ratio: {r.positive_tc_ratio:.1%}")
-
-        # ── Helpers graphes thème sombre ──────────────────────────────────
-        BG, GRID, TEXT = '#1a1a2e', '#2a2a3e', '#e0e0e0'
-
-        def _dark_fig(w=10, h=4):
-            fig, ax = plt.subplots(figsize=(w, h))
-            fig.patch.set_facecolor(BG)
-            ax.set_facecolor(BG)
-            for sp in ax.spines.values(): sp.set_color(GRID)
-            ax.tick_params(colors=TEXT, labelsize=9)
-            ax.xaxis.label.set_color(TEXT); ax.yaxis.label.set_color(TEXT)
-            ax.title.set_color(TEXT)
-            ax.grid(color=GRID, linestyle=':', linewidth=0.7)
-            return fig, ax
-
-        def _eur(x, _=None): return f"{x:,.0f} €"
 
         # ── Section 2 : Bankroll Progression ──────────────────────────────
         st.subheader("📈 Bankroll Progression")
@@ -237,11 +301,11 @@ if page == "📊 Monte Carlo Simulator":
                         (xs[low_idx], ys[low_idx]), textcoords="offset points",
                         xytext=(0, -18), ha='center', fontsize=8, color='#ef4444')
             ax.set_title(f"Bankroll progression over {r.hands_played:,} hands", fontweight='bold', fontsize=11)
-            ax.set_xlabel("Hand #", color=TEXT)
-            ax.set_ylabel("Bankroll (€)", color=TEXT)
+            ax.set_xlabel("Hand #", color=_TEXT)
+            ax.set_ylabel("Bankroll (€)", color=_TEXT)
             ax.yaxis.set_major_formatter(mticker.FuncFormatter(_eur))
             ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_: f"{int(x):,}"))
-            leg = ax.legend(fontsize=8, facecolor=BG, edgecolor=GRID, labelcolor=TEXT)
+            leg = ax.legend(fontsize=8, facecolor=_BG, edgecolor=_GRID, labelcolor=_TEXT)
             plt.tight_layout(); st.pyplot(fig); plt.close(fig)
         else:
             st.info("Enable track_history to see bankroll progression.")
@@ -260,7 +324,7 @@ if page == "📊 Monte Carlo Simulator":
             colors = ['#ef4444' if v < 0 else '#22c55e' for v in ev_vals]
             fig, ax = _dark_fig(9, 4)
             bars = ax.barh(labels, ev_vals, color=colors, edgecolor='none', height=0.55)
-            ax.axvline(0, color=TEXT, linewidth=0.8)
+            ax.axvline(0, color=_TEXT, linewidth=0.8)
             # Labels count à droite
             x_max = max(abs(v) for v in ev_vals) if ev_vals else 1
             for i, (bar, cnt) in enumerate(zip(bars, counts)):
@@ -268,9 +332,9 @@ if page == "📊 Monte Carlo Simulator":
                 ha = 'left' if xpos >= 0 else 'right'
                 offset = x_max * 0.03 if xpos >= 0 else -x_max * 0.03
                 ax.text(xpos + offset, bar.get_y() + bar.get_height()/2,
-                        f"{cnt:,} hands", va='center', ha=ha, fontsize=7.5, color=TEXT, alpha=0.7)
+                        f"{cnt:,} hands", va='center', ha=ha, fontsize=7.5, color=_TEXT, alpha=0.7)
             ax.set_title("EV per hand by True Count bucket", fontweight='bold', fontsize=11)
-            ax.set_xlabel("Average profit per hand (€)", color=TEXT)
+            ax.set_xlabel("Average profit per hand (€)", color=_TEXT)
             ax.xaxis.set_major_formatter(mticker.FuncFormatter(_eur))
             plt.tight_layout(); st.pyplot(fig); plt.close(fig)
 
@@ -293,18 +357,18 @@ if page == "📊 Monte Carlo Simulator":
                 ax.axvline(ev_mean, color='#f0c040', linewidth=1.5, linestyle='--',
                            label=f"EV mean: {ev_mean:+.3f} €")
                 ax.set_title("Distribution of hand outcomes", fontweight='bold', fontsize=11)
-                ax.set_xlabel("Net profit per hand (€)", color=TEXT)
-                ax.set_ylabel("Frequency", color=TEXT)
+                ax.set_xlabel("Net profit per hand (€)", color=_TEXT)
+                ax.set_ylabel("Frequency", color=_TEXT)
                 ax.xaxis.set_major_formatter(mticker.FuncFormatter(_eur))
                 ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_: f"{int(x):,}"))
-                leg = ax.legend(fontsize=8, facecolor=BG, edgecolor=GRID, labelcolor=TEXT)
+                leg = ax.legend(fontsize=8, facecolor=_BG, edgecolor=_GRID, labelcolor=_TEXT)
                 plt.tight_layout(); st.pyplot(fig); plt.close(fig)
             else:
                 st.info("Hand outcomes not tracked.")
 
         # ── Section 5 : Variance Analysis (multi-seed) ────────────────────
         if run_variance:
-            st.subheader("🎲 Variance Analysis — 5 Simulations")
+            st.subheader("🎲 Variance Analysis - 5 Simulations")
             SEEDS_VAR = [42, 123, 456, 789, 1337]
             COLORS_VAR = ['#4a9eff','#f0c040','#a78bfa','#34d399','#fb923c']
             variance_results = []
@@ -355,13 +419,13 @@ if page == "📊 Monte Carlo Simulator":
                 ax.fill_between(xs_var, arr.min(axis=0), arr.max(axis=0),
                                 color='#ffffff', alpha=0.07, label="Min–Max range")
             ax.set_title(
-                f"Bankroll variance across 5 simulations — {int(hands):,} hands each",
+                f"Bankroll variance across 5 simulations - {int(hands):,} hands each",
                 fontweight='bold', fontsize=11)
-            ax.set_xlabel("Hand #", color=TEXT)
-            ax.set_ylabel("Bankroll (€)", color=TEXT)
+            ax.set_xlabel("Hand #", color=_TEXT)
+            ax.set_ylabel("Bankroll (€)", color=_TEXT)
             ax.yaxis.set_major_formatter(mticker.FuncFormatter(_eur))
             ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_: f"{int(x):,}"))
-            leg = ax.legend(fontsize=8, facecolor=BG, edgecolor=GRID, labelcolor=TEXT, ncol=2)
+            leg = ax.legend(fontsize=8, facecolor=_BG, edgecolor=_GRID, labelcolor=_TEXT, ncol=2)
             plt.tight_layout(); st.pyplot(fig); plt.close(fig)
 
             # Mini-tableau de synthèse
@@ -651,7 +715,7 @@ else:
             if _s0 and _s0.startswith("p") and int(_s0[1:]) >= n_cards:
                 st.session_state.pg_edit_slot = None
 
-        # ── Cartes joueur — clic pour modifier ────────────
+        # ── Cartes joueur - clic pour modifier ────────────
         st.markdown("**Your hand** *(click a card to change it)*")
         _hcols = st.columns(n_cards)
         for _i, _r in enumerate(st.session_state.pg_cards):
@@ -715,7 +779,7 @@ else:
         )
         st.markdown(
             f'<p style="margin:6px 0 4px;font-weight:600;font-size:.95rem">'
-            f'🃏 Pick card — <em>{_slot_lbl}</em></p>',
+            f'🃏 Pick card - <em>{_slot_lbl}</em></p>',
             unsafe_allow_html=True,
         )
         _pcols = st.columns(13)
@@ -764,7 +828,7 @@ else:
     m1, m2, m3 = st.columns(3)
     m1.metric("Basic Strategy", ACTION_LABEL.get(bs_pg, bs_pg))
     m2.metric("I18 Deviation",
-              f"★ {ACTION_LABEL.get(dv_pg,dv_pg)}" if dv_pg and dv_pg!=bs_pg else "— (none)")
+              f"★ {ACTION_LABEL.get(dv_pg,dv_pg)}" if dv_pg and dv_pg!=bs_pg else "- (none)")
     m3.metric("Recommendation", ACTION_LABEL.get(rec_pg, rec_pg),
               delta="I18 deviation" if dv_pg and dv_pg!=bs_pg else "basic strategy")
 
@@ -809,7 +873,7 @@ else:
                 "Action":       ACTION_LABEL.get(act, act),
                 "EV":           f"{ev:+.5f}",
                 "EV %":         f"{ev*100:+.3f} %",
-                "Δ vs optimal": f"{ev-best_ev_pg:+.5f}" if act!=best_act else "—",
+                "Δ vs optimal": f"{ev-best_ev_pg:+.5f}" if act!=best_act else "-",
                 "IC 95%":       f"[{ev-ci:+.4f}, {ev+ci:+.4f}]",
                 "n":            f"{r['n']:,}",
                 "Tag":          ("★ I18" if act==dv_pg and dv_pg!=bs_pg
@@ -855,14 +919,14 @@ else:
         plt.tight_layout(); st.pyplot(fig); plt.close()
 
         st.success(
-            f"**Best simulated action:** {ACTION_LABEL.get(best_act,best_act)}  —  "
+            f"**Best simulated action:** {ACTION_LABEL.get(best_act,best_act)}  -  "
             f"EV = **{best_ev_pg:+.5f}** ({best_ev_pg*100:+.3f} %)"
         )
 
         # ── Scan TC ──────────────────────────────────────────
         if pg_scan:
             st.divider()
-            st.subheader("🔭 TC Scan — EV vs True Count")
+            st.subheader("🔭 TC Scan - EV vs True Count")
             st.caption(f"n = {max(10_000, pg_nsims//5):,} hands per point · range −4 → +8 (step 0.5)")
 
             tc_range = [t/2 for t in range(-8, 17)]
@@ -893,7 +957,7 @@ else:
             ax2.set_xlabel("True Count", color='white')
             ax2.set_ylabel("EV", color='white')
             ax2.set_title(
-                f"EV by action — {' + '.join(player_ranks_pg)} vs {upcard_pg}",
+                f"EV by action - {' + '.join(player_ranks_pg)} vs {upcard_pg}",
                 color='white',
             )
             ax2.tick_params(colors='white')
