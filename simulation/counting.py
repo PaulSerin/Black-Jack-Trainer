@@ -1,5 +1,5 @@
 """
-counting.py — Comptage de cartes Hi-Lo pour Blackjack Trainer Pro.
+counting.py - Comptage de cartes Hi-Lo pour Blackjack Trainer Pro.
 
 Règles Hi-Lo :
   +1 : 2, 3, 4, 5, 6

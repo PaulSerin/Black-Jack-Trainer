@@ -1,5 +1,5 @@
 """
-deviations.py — Illustrious 18 deviations Hi-Lo pour Blackjack Trainer Pro.
+deviations.py - Illustrious 18 deviations Hi-Lo pour Blackjack Trainer Pro.
 
 Source : "Blackjack Attack" de Don Schlesinger.
 Applicable : 6 decks, dealer stands on soft 17, Hi-Lo counting.
@@ -222,7 +222,7 @@ def _verify() -> None:
             print(f"ERREUR : {e}")
         raise SystemExit(1)
 
-    print(f"OK — {len(ILLUSTRIOUS_18)} déviations Illustrious 18 validées")
+    print(f"OK - {len(ILLUSTRIOUS_18)} déviations Illustrious 18 validées")
 
 
 if __name__ == "__main__":

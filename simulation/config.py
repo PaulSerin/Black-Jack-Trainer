@@ -1,5 +1,5 @@
 """
-config.py — Dataclasses de configuration pour le module de simulation.
+config.py - Dataclasses de configuration pour le module de simulation.
 
 Séparé de simulator.py pour permettre :
 - l'import de la config depuis une future interface (React, Streamlit, etc.)

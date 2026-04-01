@@ -1,5 +1,5 @@
 """
-engine.py — Moteur de jeu pur pour Blackjack Trainer Pro.
+engine.py - Moteur de jeu pur pour Blackjack Trainer Pro.
 
 Contient les dataclasses Card, Hand, Shoe, GameState ainsi que
 les fonctions pures de règles de jeu. Aucune logique de strategy ici.
@@ -181,7 +181,7 @@ class Shoe:
     def deal(self) -> Card:
         """Distribue une carte. Lève RuntimeError si le sabot est vide."""
         if self._dealt >= len(self._cards):
-            raise RuntimeError("Sabot vide — appelez shuffle() avant de continuer.")
+            raise RuntimeError("Sabot vide - appelez shuffle() avant de continuer.")
         card = self._cards[self._dealt]
         self._dealt += 1
         return card
@@ -245,7 +245,7 @@ def can_split(hand: Hand, max_splits: int = 3) -> bool:
 def can_double(hand: Hand) -> bool:
     """
     Double autorisé sur n'importe quelle 2 premières cartes
-    (règle casino standard — peut être restreint à 9-11 selon les règles).
+    (règle casino standard - peut être restreint à 9-11 selon les règles).
     """
     return len(hand.cards) == 2 and not hand.is_split_hand or (
         len(hand.cards) == 2

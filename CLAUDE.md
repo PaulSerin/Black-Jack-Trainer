@@ -1,4 +1,4 @@
-# Blackjack Trainer Pro — CLAUDE.md
+# Blackjack Trainer Pro - CLAUDE.md
 
 ## Vision du projet
 Application solo d'entraînement et de simulation au blackjack.
@@ -11,16 +11,16 @@ Public : usage personnel. Apprentissage basic strategy, deviations I18, comptage
 
 ---
 
-## État actuel — tout est implémenté
+## État actuel - tout est implémenté
 
 ### Moteur Python (`simulation/`)
-- `engine.py` — sabot 6 decks, deal, hit, stand, double, split, surrender, blackjack
-- `strategy.py` — tables basic strategy complètes hard/soft/split (source : Wizard of Odds)
-- `counting.py` — Hi-Lo running count + true count (arrondi à 0.5)
-- `deviations.py` — Illustrious 18 canonique (Schlesinger), 18 entrées exactement
-- `betting.py` — bet ramp, spread → mise selon TC
-- `simulator.py` — Monte Carlo avec basic strategy ou Basic + I18 deviations
-- `config.py` — dataclasses SimConfig, TableRules, BettingConfig, SimulationResult
+- `engine.py` - sabot 6 decks, deal, hit, stand, double, split, surrender, blackjack
+- `strategy.py` - tables basic strategy complètes hard/soft/split (source : Wizard of Odds)
+- `counting.py` - Hi-Lo running count + true count (arrondi à 0.5)
+- `deviations.py` - Illustrious 18 canonique (Schlesinger), 18 entrées exactement
+- `betting.py` - bet ramp, spread → mise selon TC
+- `simulator.py` - Monte Carlo avec basic strategy ou Basic + I18 deviations
+- `config.py` - dataclasses SimConfig, TableRules, BettingConfig, SimulationResult
 
 ### Interface React (`react/blackjack.jsx`)
 - Jeu complet : hit, stand, double, split (×4), surrender, multi-main (1–3)
@@ -34,7 +34,7 @@ Public : usage personnel. Apprentissage basic strategy, deviations I18, comptage
 - **EV Playground** : EV par action pour une main précise au TC donné, sabot biaisé Monte Carlo
 
 ### Tests (`tests/`)
-- 334 tests, tous passent — `python -m pytest tests/ -v`
+- 334 tests, tous passent - `python -m pytest tests/ -v`
 
 ---
 
@@ -52,7 +52,7 @@ Public : usage personnel. Apprentissage basic strategy, deviations I18, comptage
 ├── app_simulation.py          # Streamlit EV Lab
 ├── react/
 │   ├── blackjack.jsx          # App jeu complète (un seul fichier)
-│   └── dist/                  # Build statique — ouvrir dist/index.html
+│   └── dist/                  # Build statique - ouvrir dist/index.html
 ├── simulation/
 │   ├── engine.py
 │   ├── counting.py
@@ -72,7 +72,7 @@ Public : usage personnel. Apprentissage basic strategy, deviations I18, comptage
 
 ---
 
-## Règles métier critiques — NE JAMAIS CASSER
+## Règles métier critiques - NE JAMAIS CASSER
 
 ### Calculs fondamentaux
 - **True count** = running count / decks restants, arrondi à 0.5 (pas floor, pas int)
@@ -83,16 +83,16 @@ Public : usage personnel. Apprentissage basic strategy, deviations I18, comptage
 
 ### Basic strategy
 - Source vérifiée : https://wizardofodds.com/games/blackjack/strategy/6-decks/
-- Tables hard (5–21) / soft (A2–A9) / split (2–A) — **ne jamais modifier sans source**
+- Tables hard (5–21) / soft (A2–A9) / split (2–A) - **ne jamais modifier sans source**
 - Y/N = split uniquement si DAS autorisé
 
-### Illustrious 18 — liste canonique
+### Illustrious 18 - liste canonique
 Source : Don Schlesinger, *Blackjack Attack*. La liste doit contenir **exactement 18 entrées** :
 - 1 insurance (hand_type="insurance")
 - 2 pair splits : 10,10 vs 5 (TC≥+5), 10,10 vs 6 (TC≥+4)
 - 15 hard deviations
 
-**Entrées non canoniques** (à ne jamais rajouter) : "14 vs 10 TC≥3" et "15 vs 9 TC≥2" — elles avaient été incluses par erreur et ont été retirées.
+**Entrées non canoniques** (à ne jamais rajouter) : "14 vs 10 TC≥3" et "15 vs 9 TC≥2" - elles avaient été incluses par erreur et ont été retirées.
 
 ### Règle SUR → Stand (BUG DÉJÀ CORRIGÉ)
 Les déviations I18 "Stand" (ex. 16 vs 10 à TC≥0) ont été calibrées pour des jeux **sans surrender**. Dans un jeu avec surrender, SUR (EV ≈ −0.500) est meilleur que Stand (EV ≈ −0.543) jusqu'à TC ≈ +5.
@@ -113,7 +113,7 @@ Implémenté dans `simulator.py::_pick_action()` et dans `deviationHint()` dans 
 
 ---
 
-## Architecture React — points clés
+## Architecture React - points clés
 
 ### Phases du jeu
 ```
@@ -124,9 +124,9 @@ Implémenté dans `simulator.py::_pick_action()` et dans `deviationHint()` dans 
 - `'revealing'` : animation dealer + pendingResult appliqué via useEffect
 - `preHandResults[]` : mains résolues avant le jeu (BJ joueur/dealer)
 
-### State minimal — règles
+### State minimal - règles
 - Ne stocker dans le state que ce qui déclenche un re-render
-- `insuranceTaken`/`insuranceBet` : utilisés uniquement comme relay dans les handlers, pas lus dans le rendu — c'est intentionnel
+- `insuranceTaken`/`insuranceBet` : utilisés uniquement comme relay dans les handlers, pas lus dans le rendu - c'est intentionnel
 
 ### Hint panel
 - Positionné dans le **header, à gauche du Hi-Lo counter**
@@ -143,7 +143,7 @@ Chaque entrée a un flag `pair: true/false`. La fonction `deviationHint()` :
 
 ---
 
-## Architecture Python — points clés
+## Architecture Python - points clés
 
 ### Responsabilités des fichiers
 - `engine.py` : moteur pur, **zéro stratégie**, zéro counting
@@ -161,7 +161,7 @@ P1 visible → D1/upcard visible → P2 visible → D2/hole (pas compté)
 → dealer joue
 ```
 
-### EV Playground — `_simulate_ev()`
+### EV Playground - `_simulate_ev()`
 Le sabot est biaisé (`_build_shoe()`) pour approcher le TC cible en ajustant
 la composition des cartes restantes. Chaque action est simulée indépendamment
 sur le même TC et les mêmes règles.
@@ -194,7 +194,7 @@ Pour `action == 'INS'` : EV normalisé à la mise principale = +0.5 si dealer BJ
 
 - Ne jamais modifier les tables de strategy sans source vérifiée (WoO)
 - Ne jamais modifier la liste I18 sans vérifier la source (Schlesinger)
-- Ne jamais rajouter "14 vs 10 TC≥3" ou "15 vs 9 TC≥2" dans I18 — non canoniques
+- Ne jamais rajouter "14 vs 10 TC≥3" ou "15 vs 9 TC≥2" dans I18 - non canoniques
 - Ne jamais laisser une déviation I18 "Stand" remplacer SUR
 - Ne pas mélanger logique métier et composants React
 - Ne pas ajouter de dépendances npm sans demander
@@ -259,4 +259,4 @@ python simulation/counting.py --debug
 - **Penetration slider Streamlit** : utiliser un slider int (50–95) + division `/100`, pas float (cause affichage "1%")
 - **st.toggle()** : remplacer par `st.checkbox()` si les boutons ronds ne sont pas voulus
 - **Phase insurance React** : `hideFirst` doit inclure `phase === 'insurance'` sinon la hole card est visible
-- **Synchronisation React ↔ Python** : le tableau I18 dans `blackjack.jsx` doit rester identique à `deviations.py` — vérifier les deux à chaque modification I18
+- **Synchronisation React ↔ Python** : le tableau I18 dans `blackjack.jsx` doit rester identique à `deviations.py` - vérifier les deux à chaque modification I18

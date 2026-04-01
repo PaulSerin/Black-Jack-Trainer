@@ -1,5 +1,5 @@
 """
-strategy.py — Basic strategy complète pour 6 decks, dealer stands on soft 17.
+strategy.py - Basic strategy complète pour 6 decks, dealer stands on soft 17.
 
 Source : https://wizardofodds.com/games/blackjack/strategy/6-decks/
 
@@ -25,7 +25,7 @@ from simulation.engine import Card, Hand
 
 # ---------------------------------------------------------------------------
 # Normalisation du rang de l'upcard
-# J, Q, K ont la même valeur que "10" — les tables utilisent "10"
+# J, Q, K ont la même valeur que "10" - les tables utilisent "10"
 # ---------------------------------------------------------------------------
 
 def _normalize_upcard(rank: str) -> str:
@@ -34,7 +34,7 @@ def _normalize_upcard(rank: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Colonnes upcard (2 à A — "10" représente toutes les cartes de valeur 10)
+# Colonnes upcard (2 à A - "10" représente toutes les cartes de valeur 10)
 # ---------------------------------------------------------------------------
 
 UPCARDS: tuple[str, ...] = ("2", "3", "4", "5", "6", "7", "8", "9", "10", "A")
@@ -42,7 +42,7 @@ UPCARDS: tuple[str, ...] = ("2", "3", "4", "5", "6", "7", "8", "9", "10", "A")
 
 # ---------------------------------------------------------------------------
 # HARD_STRATEGY
-# Clé   : (player_total: int, dealer_upcard_rank: str)  — upcard normalisé
+# Clé   : (player_total: int, dealer_upcard_rank: str)  - upcard normalisé
 # Totaux couverts : 8–17  (≤7 → H, ≥18 → S par défaut)
 # ---------------------------------------------------------------------------
 
@@ -69,7 +69,7 @@ HARD_STRATEGY: dict[tuple[int, str], str] = {
 
 # ---------------------------------------------------------------------------
 # SOFT_STRATEGY
-# Clé : (non_ace_value: int, dealer_upcard_rank: str)  — upcard normalisé
+# Clé : (non_ace_value: int, dealer_upcard_rank: str)  - upcard normalisé
 # non_ace_value = valeur de la carte non-As : A,2 → 2 … A,9 → 9
 # ---------------------------------------------------------------------------
 
@@ -94,7 +94,7 @@ SOFT_STRATEGY: dict[tuple[int, str], str] = {
 
 # ---------------------------------------------------------------------------
 # SPLIT_STRATEGY
-# Clé : (pair_card_value: int, dealer_upcard_rank: str)  — upcard normalisé
+# Clé : (pair_card_value: int, dealer_upcard_rank: str)  - upcard normalisé
 # pair_card_value : valeur d'une carte de la paire (As=11, figures=10)
 # ---------------------------------------------------------------------------
 
@@ -120,7 +120,7 @@ SPLIT_STRATEGY: dict[tuple[int, str], str] = {
 
 
 # ---------------------------------------------------------------------------
-# SURRENDER (index rapide — déjà intégré dans HARD_STRATEGY via "SUR")
+# SURRENDER (index rapide - déjà intégré dans HARD_STRATEGY via "SUR")
 # ---------------------------------------------------------------------------
 
 SURRENDER: dict[tuple[int, str], bool] = {
@@ -133,7 +133,7 @@ SURRENDER: dict[tuple[int, str], bool] = {
 
 
 # ---------------------------------------------------------------------------
-# get_basic_strategy — point d'entrée principal
+# get_basic_strategy - point d'entrée principal
 # ---------------------------------------------------------------------------
 
 def get_basic_strategy(hand: Hand, dealer_upcard: Card) -> str:
@@ -176,7 +176,7 @@ def get_basic_strategy(hand: Hand, dealer_upcard: Card) -> str:
 
 
 # ---------------------------------------------------------------------------
-# get_action — unified entry point (basic or basic+deviations)
+# get_action - unified entry point (basic or basic+deviations)
 # ---------------------------------------------------------------------------
 
 def get_action(
@@ -242,7 +242,7 @@ def _verify() -> None:
         raise SystemExit(1)
 
     n = len(HARD_STRATEGY) + len(SOFT_STRATEGY) + len(SPLIT_STRATEGY)
-    print(f"OK — {len(HARD_STRATEGY)} hard, {len(SOFT_STRATEGY)} soft, "
+    print(f"OK - {len(HARD_STRATEGY)} hard, {len(SOFT_STRATEGY)} soft, "
           f"{len(SPLIT_STRATEGY)} split ({n} entrees au total)")
 
 

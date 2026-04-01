@@ -1,5 +1,5 @@
 """
-test_strategy.py — Tests unitaires pour simulation/strategy.py
+test_strategy.py - Tests unitaires pour simulation/strategy.py
 """
 
 import sys, os
@@ -170,7 +170,7 @@ class TestTableIntegrity:
 
 
 # ===========================================================================
-# Hard strategy — cas clés
+# Hard strategy - cas clés
 # ===========================================================================
 
 class TestHardStrategy:
@@ -219,7 +219,7 @@ class TestHardStrategy:
 
 
 # ===========================================================================
-# Soft strategy — cas clés
+# Soft strategy - cas clés
 # ===========================================================================
 
 class TestSoftStrategy:
@@ -255,7 +255,7 @@ class TestSoftStrategy:
 
 
 # ===========================================================================
-# Split strategy — cas clés
+# Split strategy - cas clés
 # ===========================================================================
 
 class TestSplitStrategy:

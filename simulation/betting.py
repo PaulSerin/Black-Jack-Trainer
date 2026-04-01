@@ -1,5 +1,5 @@
 """
-betting.py — Logique de mise pour la simulation Monte Carlo.
+betting.py - Logique de mise pour la simulation Monte Carlo.
 
 Séparé de simulator.py pour permettre de tester et modifier
 la rampe de mise indépendamment du moteur de simulation.

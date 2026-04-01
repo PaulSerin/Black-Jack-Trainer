@@ -1,5 +1,5 @@
 """
-test_engine.py — Tests unitaires pour simulation/engine.py
+test_engine.py - Tests unitaires pour simulation/engine.py
 """
 
 import pytest
@@ -66,7 +66,7 @@ class TestCard:
 
 
 # ===========================================================================
-# Hand — value & soft
+# Hand - value & soft
 # ===========================================================================
 
 class TestHandValue:
@@ -142,7 +142,7 @@ class TestHandValue:
 
 
 # ===========================================================================
-# Hand — blackjack & is_pair
+# Hand - blackjack & is_pair
 # ===========================================================================
 
 class TestHandBlackjack:

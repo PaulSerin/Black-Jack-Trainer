@@ -1,5 +1,5 @@
 """
-test_simulator.py — Tests unitaires pour la simulation Monte Carlo.
+test_simulator.py - Tests unitaires pour la simulation Monte Carlo.
 """
 
 import pytest
@@ -149,7 +149,7 @@ class TestSimulate:
 
 
 # ---------------------------------------------------------------------------
-# Test EV — le plus important
+# Test EV - le plus important
 # EV flat bet basic strategy 6 decks S17 DAS SUR ≈ -0.5%
 # Tolérance large pour 1M mains : [-1.0%, 0.0%]
 # ---------------------------------------------------------------------------
@@ -180,7 +180,7 @@ class TestEV:
         ev = result.ev_percent
 
         assert result.hands_played == 1_000_000, \
-            f"Bankroll epuisee apres {result.hands_played} mains — augmenter initial_bankroll"
+            f"Bankroll epuisee apres {result.hands_played} mains - augmenter initial_bankroll"
         assert -1.0 <= ev <= 0.0, (
             f"EV = {ev:.4f}% hors de la plage attendue [-1.0%, 0.0%].\n"
             f"Verifier get_basic_strategy() et la normalisation J/Q/K."

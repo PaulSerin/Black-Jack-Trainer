@@ -1,5 +1,5 @@
 """
-test_deviations.py — Tests unitaires pour simulation/deviations.py
+test_deviations.py - Tests unitaires pour simulation/deviations.py
 Couvre les 18 deviations Illustrious 18 + override sur basic strategy.
 """
 
@@ -107,7 +107,7 @@ class TestI18Integrity:
 
 
 # ===========================================================================
-# Les 18 déviations — test individuel (seuil, en dessous, au dessus)
+# Les 18 déviations - test individuel (seuil, en dessous, au dessus)
 # ===========================================================================
 
 class TestEachDeviation:
@@ -381,7 +381,7 @@ class TestSoftHandsIgnoreHardDeviations:
         # is_pair = True et is_soft = True pour A,A ; le test pair prime
         # Ici on crée une main soft 12 non-paire : impossible avec 2 cartes
         # → on vérifie juste que la déviation hard ne s'applique pas à soft 16
-        h2 = soft_hand("5")  # soft 16, pas 12 — test de principe
+        h2 = soft_hand("5")  # soft 16, pas 12 - test de principe
         assert get_deviation(h2, up("3"), 3.0) is None
 
     def test_soft_hand_is_never_matched_by_hard_deviation(self):

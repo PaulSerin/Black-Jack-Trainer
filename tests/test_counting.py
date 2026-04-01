@@ -1,5 +1,5 @@
 """
-test_counting.py — Tests unitaires pour simulation/counting.py
+test_counting.py - Tests unitaires pour simulation/counting.py
 """
 
 import pytest
@@ -13,7 +13,7 @@ from simulation.counting import card_value, HiLoCounter, _round_half
 
 
 # ===========================================================================
-# card_value — valeurs Hi-Lo
+# card_value - valeurs Hi-Lo
 # ===========================================================================
 
 class TestCardValue:
@@ -52,7 +52,7 @@ class TestCardValue:
 
 
 # ===========================================================================
-# _round_half — arrondi au 0.5 le plus proche
+# _round_half - arrondi au 0.5 le plus proche
 # ===========================================================================
 
 class TestRoundHalf:
@@ -87,7 +87,7 @@ class TestRoundHalf:
 
 
 # ===========================================================================
-# HiLoCounter — running count
+# HiLoCounter - running count
 # ===========================================================================
 
 class TestHiLoCounterRunningCount:
@@ -149,7 +149,7 @@ class TestHiLoCounterRunningCount:
 
 
 # ===========================================================================
-# HiLoCounter — true count
+# HiLoCounter - true count
 # ===========================================================================
 
 class TestHiLoCounterTrueCount:
@@ -244,7 +244,7 @@ class TestHiLoCounterTrueCount:
 
 
 # ===========================================================================
-# HiLoCounter — reset
+# HiLoCounter - reset
 # ===========================================================================
 
 class TestHiLoCounterReset:

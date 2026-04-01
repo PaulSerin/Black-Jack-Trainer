@@ -1,5 +1,5 @@
 """
-simulator.py — Moteur Monte Carlo (basic strategy uniquement).
+simulator.py - Moteur Monte Carlo (basic strategy uniquement).
 
 Usage CLI :
     python -m simulation.simulator --hands 500000 --spread 1-12 --unit-size 25
@@ -222,7 +222,7 @@ def simulate(config: SimConfig) -> SimulationResult:
         p1 = shoe.deal(); counter.update(p1); player_hand.add_card(p1)
         d1 = shoe.deal(); counter.update(d1); dealer_hand.add_card(d1)   # upcard
         p2 = shoe.deal(); counter.update(p2); player_hand.add_card(p2)
-        d2 = shoe.deal();                     dealer_hand.add_card(d2)   # hole card — pas encore comptée
+        d2 = shoe.deal();                     dealer_hand.add_card(d2)   # hole card - pas encore comptée
 
         dealer_upcard = dealer_hand.cards[0]  # d1 = upcard visible
 
@@ -418,7 +418,7 @@ def _welford(n: int, mean: float, M2: float, x: float) -> tuple[int, float, floa
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Blackjack Monte Carlo — Basic Strategy")
+    parser = argparse.ArgumentParser(description="Blackjack Monte Carlo - Basic Strategy")
     parser.add_argument("--hands",     type=int,   default=500_000)
     parser.add_argument("--spread",    type=str,   default="1-1",
                         help="Bet spread ex. '1-12' (defaut: flat 1-1)")
