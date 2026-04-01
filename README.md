@@ -1,6 +1,6 @@
 # Blackjack Trainer
 
-I love card games, strategy, and blackjack in particular, so I asked myself the question:
+I love card games, strategy, maths, and blackjack in particular, so I asked myself the question:
 **can you actually beat the casino?**
 
 This project is my attempt to answer that. I wanted to build two things at once: a proper
