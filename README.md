@@ -1,3 +1,5 @@
+![Banner](docs/screenshots/screens/Blackjack_banner.jpg)
+
 # Blackjack Trainer
 
 I love card games, strategy, maths, and blackjack in particular, so I asked myself the question:
